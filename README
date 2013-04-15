@@ -1,5 +1,15 @@
 General information
 *******************
+rpsltool is a suite of libraries and programs which generate configuration
+fragments for the BGP sessions of peers and customers.
+It supports automatically generating routes and as-paths ACLs by querying
+a RPSL whois server.
+Some example templates are provided for IOS, Junos and BIRD, but the
+program can easily extended to support other targets thanks to
+Template::Toolkit.
+
+http://www.linux.it/~md/text/rpsltool-trex.pdf is an introduction to RPSL
+and rpsltool.
 
 YAML Configuration
 ~~~~~~~~~~~~~~~~~~
@@ -7,7 +17,7 @@ Most programs use one or more configuration files in YAML format.
 YAML is a general purpose data serialization standard, check www.yaml.org
 for details about the YAML syntax.
 Usually all parameters have sane defaults.
-If an element expecting a list contains a scalar, that will be automatically
+If an element expecting a list contains a scalar, it will be automatically
 promoted to a list.
 
 
@@ -17,8 +27,8 @@ The BGP peers and customers connected to a router are listed in a YAML
 configuration file containing three YAML documents (lists of variables
 separated by ---):
  * the configuration parameters
- * generic variables made available to the template (accessible as members
-   of the "var" associative array)
+ * generic variables made available to the template (accessible in the
+   template as members of the "var" associative array)
  * the list of neighbors with their parameters
 
 Elements of the neighbors list with the "template: y" variable are a set
