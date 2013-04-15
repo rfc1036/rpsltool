@@ -1,0 +1,17 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=yaml shiftwidth=2 expandtab autoindent
+--- #YAML:1.0
+# Misc parameters.
+template: cisco-prefix.tt2
+cache_root: /tmp/rpsltool
+
+---
+
+---
+# this naughty peer is announcing a shameful list of deaggregates
+- as: 13284
+  description: Brain Technology
+  import: AS-BRT-NAMEX
+  unimport: [ '195.110.96.0/19^-', '212.19.96.0/19^-' ]
+  ip: 193.201.28.33
+

@@ -45,7 +45,7 @@ die if not $param2;
 make_boolean($param, qw(ignore_custom_routes ignore_custom_asn
 	whois_die_on_error whois_warn_on_error whois_warn_on_recursive_error));
 
-my $peers = process_peers_config($peers_config);
+my $peers = process_peers_config($peers_config, $param);
 
 if ($asn) {
 	$ip = neigh_by_asn($peers, $asn);

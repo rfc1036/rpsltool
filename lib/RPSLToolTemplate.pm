@@ -42,6 +42,10 @@ sub Template::create_net_vmethods {
 
 	my $context = $template->context;
 
+$context->define_vmethod('list', 'dotescape' => sub {
+	return map { s/\./\\./g; $_; } @{$_[0]};
+});
+
 $context->define_vmethod('list', 'asnsort' => sub {
 	return sort by_asn @{$_[0]};
 });

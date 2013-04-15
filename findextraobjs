@@ -34,7 +34,7 @@ die if not defined $param;
 
 my $Routes_Dir = $ARGV[1];
 
-my $peers = process_peers_config($peers_config);
+my $peers = process_peers_config($peers_config, $param);
 
 my $whois = whois_factory($param);
 

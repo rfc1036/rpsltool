@@ -1,3 +1,13 @@
+1.3
+Added support for ASN32: each ASN32 returned by RPSL expansion will be
+replaced by AS23456 (AS_TRANS) unless the neighbor level boolean variable
+asn32_supported is set (either at neighbor level or at the global level
+as a default).
+Added a "dotescape" Template::Toolkit list vmethod intended to be used as
+syntactic sugar to escape the dots in regexps for ASN32 lists.
+rpsltool: fixed the logic of the unimport and global_unimport directives,
+which was reversed in 1.2.
+
 1.2
 Added neighbor level variables "localpref" and "metric", inheritable from
 neighbor templates.

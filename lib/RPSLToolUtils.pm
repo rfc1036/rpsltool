@@ -3,17 +3,40 @@ use strict;
 
 use Storable qw(dclone);
 
+# configuration directives which can benefit from some special handling
+use constant FIELDS_NEIGH_BOOLEAN => qw(
+	template customer default_aspath_filter asn32_supported disabled
+);
+use constant FIELDS_NEIGH_ARRAY => qw(
+	import unimport global_unimport bgp_commands
+);
+use constant FIELDS_AFI_BOOLEAN => qw(
+	default_aspath_filter asn32_supported
+);
+use constant FIELDS_AFI_ARRAY => qw(
+	import unimport global_unimport bgp_commands
+);
+use constant FIELDS_FROM_NEIGH => qw(
+	import unimport default_aspath_filter
+	maxpref peergroup localpref metric asn32_supported
+);
+use constant FIELDS_FROM_GLOBALS => qw(
+	default_aspath_filter asn32_supported
+);
+
+
+use constant AFIS => qw(ipv4 ipv6 ipv4m ipv6m);
+
 # Does a first pass over the configuration and normalizes some fields.
 sub process_peers_config {
-	my ($peers) = @_;
+	my ($peers, $param) = @_;
 
 	my (%conf);
 	my $default = { };
 	foreach my $peer (@$peers) {
 		# normalize these fields
-		make_boolean($peer, qw(template customer default_aspath_filter
-			disabled));
-		make_array($peer, qw(import unimport global_unimport bgp_commands));
+		make_boolean($peer, FIELDS_NEIGH_BOOLEAN);
+		make_array($peer, FIELDS_NEIGH_ARRAY);
 
 		# store the defaults
 		if ($peer->{template}) {
@@ -35,7 +58,7 @@ sub process_peers_config {
 		# if no AFI is defined, choose unicast IPv4 or IPv6 by looking at
 		# the peer IP address
 		my $found_afi;
-		foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+		foreach my $afi (AFIS) {
 			next if not exists $peer->{$afi};
 			$found_afi = 1;
 			last;
@@ -46,24 +69,28 @@ sub process_peers_config {
 			$peer->{$afi} = { };
 		}
 
-		# import the default values
+		# import the default values from the latest template processed
 		foreach my $attr (keys %$default) {
 			next if exists $peer->{$attr} or not exists $default->{$attr};
 			$peer->{$attr} = $default->{$attr};
 		}
 
+		# import the default values from the global parameters
+		foreach my $attr (FIELDS_FROM_GLOBALS) {
+			next if exists $peer->{$attr} or not exists $param->{$attr};
+			$peer->{$attr} = $param->{$attr};
+		}
+
 		$conf{$peer->{ip}} = dclone($peer);
 
-		foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+		foreach my $afi (AFIS) {
 			next if not exists $peer->{$afi};
-			make_boolean($peer->{$afi}, qw(import_default_routes));
-			make_array($peer->{$afi}, qw(import unimport global_unimport
-				bgp_commands));
+			make_boolean($peer->{$afi}, FIELDS_AFI_BOOLEAN);
+			make_array($peer->{$afi}, FIELDS_AFI_ARRAY);
 
-			# import some values from the global peer configuration,
-			# if they are not defined for the AFI
-			foreach my $attr qw(import unimport default_aspath_filter
-					maxpref peergroup localpref metric) {
+			# import some values from the global (AFI-independent) neighbor
+			# configuration, if they are not defined for the AFI
+			foreach my $attr (FIELDS_FROM_NEIGH) {
 				next if exists $peer->{$afi}->{$attr} or
 					not exists $peer->{$attr};
 				$peer->{$afi}->{$attr} = $peer->{$attr};
@@ -99,7 +126,7 @@ sub iterate_peers {
 	my ($peers, $run) = @_;
 
 	foreach my $peer (values %$peers) {
-		foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+		foreach my $afi (AFIS) {
 			next unless exists $peer->{$afi};
 			$run->($peer, $afi);
 		}
@@ -149,10 +176,14 @@ sub by_ipv46 {
 
 # sort by ASN
 sub by_asn {
-	my ($as1) = $a =~ /^(?:[Aa][Ss])([0-9]+)/;
-	my ($as2) = $b =~ /^(?:[Aa][Ss])([0-9]+)/;
+	my ($as1hi, $as1lo) = $a =~ /^(?:[Aa][Ss])([0-9]+)(\.[0-9]+)?/;
+	my ($as2hi, $as2lo) = $b =~ /^(?:[Aa][Ss])([0-9]+)(\.[0-9]+)?/;
 
-	$as1 <=> $as2;
+	if (defined $as1lo and defined $as2lo) {
+		return $as1hi <=> $as2hi || $as1lo <=> $as2lo;
+	} else {
+		return $as1hi <=> $as2hi;
+	}
 }
 
 ##############################################################################

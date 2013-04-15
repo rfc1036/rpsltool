@@ -57,7 +57,7 @@ make_boolean($param, qw(nomail ignore_custom_routes ignore_custom_asn
 	check_all_routes check_origin_only
 	whois_die_on_error whois_warn_on_error whois_warn_on_recursive_error));
 
-my $peers = process_peers_config($peers_config);
+my $peers = process_peers_config($peers_config, $param);
 
 my $whois = whois_factory($param);
 

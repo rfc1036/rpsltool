@@ -1,0 +1,17 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=yaml shiftwidth=2 expandtab autoindent
+--- #YAML:1.0
+# Misc parameters.
+template: cisco-prefix.tt2
+cache_root: /tmp/rpsltool
+asn32_supported: y
+default_aspath_filter: y
+
+---
+
+---
+- as: 65000
+  import: [ AS3.3, AS3.5 ]
+  ip: 10.0.0.1
+  ipv4: { aslist: 1 }
+

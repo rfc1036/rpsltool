@@ -30,7 +30,7 @@ my %default_parameters = (
 	cache_root			=> '/tmp/rpsltool',
 	whois_die_on_error	=> 0,
 	whois_warn_on_error	=> 1,
-	whois_show_cache_misses	=> 1, # XXX TO BE DISABLED
+	whois_show_cache_misses	=> 0,
 );
 
 ##############################################################################
@@ -54,7 +54,7 @@ make_boolean($param, qw(whois_die_on_error whois_warn_on_error
 	whois_warn_on_recursive_error));
 
 ##############################################################################
-my $peers = process_peers_config($peers_config);
+my $peers = process_peers_config($peers_config, $param);
 
 # open the connection to the whois server and configure the default parameters
 my $whois = whois_factory($param);
@@ -90,7 +90,8 @@ sub do_rpsl {
 				next if not ($r and @$r);
 				@unimport = map { $whois->expand_route_set($_, $ipv6) } @$r;
 			}
-			@$routes = @{ filter_networks($routes, \@unimport) } if @unimport;
+			@$routes = @{ filter_networks($routes, \@unimport, 1) }
+				if @unimport;
 			# for some reason which I forgot, @routes must be cloned here
 			# uniq_list does it anyway
 			# $neigh->{import_routes} = [ @routes ] if @routes;
@@ -100,6 +101,10 @@ sub do_rpsl {
 				$neigh->{import_routes} = uniq_list($routes);
 			}
 			if (@$aspathlist) {
+				# replace each ASN32 with AS_TRANS unless requested
+				@$aspathlist =
+					map { s/^[Aa][Ss]\d+\.\d+$/AS23456/; $_ } @$aspathlist
+						unless $neigh->{asn32_supported};
 				$neigh->{import_as} =
 					[ map { s/^AS//; $_; } @{ uniq_list($aspathlist) } ];
 				$neigh->{aslistnum} = $neigh->{aslist}
