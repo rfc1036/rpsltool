@@ -12,7 +12,7 @@ sub whois_factory {
 
 	my $whois = Net::Whois::RIPE->new($param->{whois_server}) or die;
 
-	foreach my $name qw(die_on_error warn_on_error warn_on_recursive_error) {
+	foreach my $name (qw(die_on_error warn_on_error warn_on_recursive_error)) {
 		$whois->{"_$name"} = $param->{"whois_$name"}
 			if defined $param->{"whois_$name"};
 	};

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright 2005-2010 by Marco d'Itri <md@linux.it>
+# Copyright 2005-2011 by Marco d'Itri <md@linux.it>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -74,7 +74,7 @@ sub do_rpsl {
 	my ($whois, $peers) = @_;
 
 	foreach my $ip (keys %$peers) {
-		foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+		foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
 			my $neigh = $peers->{$ip}->{$afi} || next;
 			my $ipv6 = $afi =~ /^ipv6/;
 
@@ -127,7 +127,7 @@ sub create_backup {
 
 	# delete the elements which trigger lists generation in the template
 	delete $newneigh->{$_} foreach qw(import_as import_routes backupip);
-	foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+	foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
 		my $neigh = $newneigh->{$afi} || next;
 
 		delete $neigh->{$_} foreach qw(import_as import_routes);

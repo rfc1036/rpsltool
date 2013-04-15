@@ -49,7 +49,7 @@ sub process_peers_config {
 		next if $peer->{disabled} or $default->{disabled};
 
 		# sanity check for the mandatory options
-		foreach my $field qw(ip as) {
+		foreach my $field (qw(ip as)) {
 			die "This entry lacks the '$field' field:\n"
 					. join("\n", map { "$_: $peer->{$_}" } keys %$peer) . "\n"
 				if not $peer->{$field};
