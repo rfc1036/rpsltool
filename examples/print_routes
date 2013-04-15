@@ -1,0 +1,20 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=tt2
+# This script prints in the form of a prefix-list the aggregated IPv4
+# networks which can be announced by the members of an as-set.
+# I use it to generate the filter I send to Sprint.
+
+[%
+  as_set = 'AS65000:AS-CUSTOMERS';
+  routes = [ ];
+  FOREACH as = as_set.expand_as_set.unique;
+    as_routes = as.v4routes;
+#    as _ "\n"; " " _ as_routes.join(", ") _ "\n";
+    NEXT IF NOT as_routes;
+    routes = routes.merge(as_routes.list);
+  END;
+  # remove .aggregate to get the exact list of prefixes
+  FOREACH net = routes.unique.aggregate;
+    "ip prefix-list AS65000-in permit " _ net _ " le 24\n";
+  END
+%]

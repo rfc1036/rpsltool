@@ -67,6 +67,17 @@ ipv6:
   import: AS34695
   ipv6: { bgp_commands: override-capability-neg }
 
+# customers with a partial view
+# the peer-group contains default-originate
+- template: y
+  customer: y
+  peergroup: CUSTOMER-PARTIAL
+
+- as: 65001
+  description: Another peer
+  import: AS-CUSTOMER
+  ip: 2001:1418:1:400::5A
+
 # peers
 - template: y
   customer: n

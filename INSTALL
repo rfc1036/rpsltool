@@ -6,21 +6,23 @@ Cache::FileCache           # libcache-cache-perl
 Net::IP                    # libnet-ip-perl
 Template                   # libtemplate-perl
 
-If you are installing Net::Whois::RIPE then you MUST patch it with the
-NWR6.diff file. (The Debian package has already been patched.)
+If you are installing a version of Net::Whois::RIPE <= 1.22 then you
+MUST patch it with the NWR6.diff file.
+(The Debian package has already been patched.)
 
 The rpsltool program must be installed in a directory in the $PATH.
 
 The YAML config files can be run as scripts, and will print the generated
 configuration on stdout.
+See www.yaml.org for details about the YAML syntax.
 
 The point of the supplied templates file is not to provide fully
 generic and parametrized templates which can be used for every
 router in every company, but to show some examples of template which
 after some customization may be used for a class of routers in a company.
 
-The mambo and hula example configuration files are a subset of real
-configuration files which have been used in production.
+The mambo and hula example configuration files are an edited subset of
+real configuration files which have been used in production.
 
 If you want to show your appreciation for my work: http://blog.bofh.it/amazon
 

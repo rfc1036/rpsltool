@@ -62,16 +62,18 @@ ipv6:
 
 - as: 137
   description: GARR
-  import: <AS-GARR>
+  import: AS-GARR
   ip: 217.29.66.39
-  #backupip: 217.29.67.39
+  backupip: 217.29.67.39
   ipv4: { aslist: 37 }
+  akamai: y
 
 - as: 1267
   description: WIND
   import: [ <AS-INFOSTRADA>, <AS9035>, <AS21291>, <AS31706>, <AS2164> ]
   ip: 217.29.66.9
   ipv4: { aslist: 19 }
+  akamai: y
 
 - as: 2686
   description: "AT&T"
