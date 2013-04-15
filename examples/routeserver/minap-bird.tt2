@@ -1,0 +1,191 @@
+[%
+# vim: syntax=tt2 shiftwidth=2 expandtab autoindent
+USE date;
+USE wrap;
+
+# determine the "short" alphanumeric name of each neighbor
+FOREACH ip = conf.keys;
+  IF conf.$ip.name;
+    conf.$ip.name = conf.$ip.name | lower;
+  ELSIF conf.$ip.description;
+    conf.$ip.name = conf.$ip.description.replace('^([a-zA-Z0-9]+).*', '$1') | lower;
+  ELSE;
+    conf.$ip.name = 'as' _ conf.$ip.as;
+  END;
+END;
+
+# Remove the IPv4 or the IPv6 peers depending on the "ipv6" configuration
+# variable in the template, because BIRD needs one config file for each AFI.
+FOREACH ip = conf.keys;
+  neigh = conf.$ip;
+  IF    var.ipv6 == 'y' AND NOT ip.match(':');
+    conf.delete(ip);
+  ELSIF var.ipv6 == 'n' AND     ip.match(':');
+    conf.delete(ip);
+  END;
+END;
+
+%]
+/*****************************************************************************
+*
+* BIRD configuration for rs-b.minap.it
+* Generated on [% date.format(date.now, '%F %T') %].
+*
+*****************************************************************************/
+/* http://bird.network.cz/?get_doc&f=bird-3.html */
+
+router id 92.60.70.252;
+[% IF var.ipv6 == 'y' %]
+listen bgp address 2a01:658:ffff::252;
+[% ELSE %]
+listen bgp address 92.60.70.252;
+[% END %]
+
+#debug protocols { states, routes, filters };
+debug protocols { states, routes };
+
+# must not be disabled or BGP will be silently disabled
+protocol device {
+	scan time 604800;
+}
+
+/****************************************************************************/
+/* http://bird.network.cz/?get_doc&f=bird-5.html */
+
+function invalid_prefix()
+prefix set invalid;
+{
+	invalid = [
+[% IF var.ipv6 == 'y' %]
+		3ffe::/16+, 2001:db8::/32+,
+		fe00::/9+, ff00::/8+, ::/128-,
+		::0/0{0,15}, ::/0{49,128}
+[% ELSE %]
+		10.0.0.0/8+, 192.168.0.0/16+, 172.16.0.0/12+,
+		127.0.0.0/8+, 169.254.0.0/16+, 224.0.0.0/4+, 240.0.0.0/4+,
+		0.0.0.0/32-, 0.0.0.0/0{0,7}, 0.0.0.0/0{25,32}
+[% END %]
+	];
+	if net ~ invalid then return true;
+	return false;
+}
+
+function bgp_in(int peeras)
+{
+	# enforce the presence of the peer AS as the first AS of the path
+	if !(bgp_path.first = peeras) then return false;
+	# basic sanity checks
+	if (invalid_prefix()) then return false;
+	return true;
+}
+
+function bgp_out(int peeras)
+{
+	# sanity check: ignore routes not learned from BGP
+	if !(source = RTS_BGP) then return false;
+
+	# do not advertise to <peeras>
+	if (0,     peeras) ~ bgp_community  then return false;
+	# advertise to <peeras>
+	if ([% var.myasn %], peeras) ~ bgp_community  then return true;
+	# do not advertise to any peer
+	if (0,     [% var.myasn %])  ~ bgp_community  then return false;
+[% IF var.defaultdeny %]
+	# advertise to all peers
+	if ([% var.myasn %], [% var.myasn %])  ~ bgp_community  then return true;
+	return false;
+[% ELSE %]
+	return true;
+[% END %]
+}
+
+/****************************************************************************/
+/* For the pipe protocol, export filters control export of routes from the
+ * primary table ("table") to the secondary one ("peer table"), import
+ * filters control the opposite direction.
+ */
+[% seen = [] %]
+[% FOREACH ip = conf.keys.ipsort %]
+[%
+neigh = conf.$ip;
+afi = var.ipv6 == 'y' ? 'ipv6' : 'ipv4';
+
+# generate the configuration once even if the AS has multiple addresses
+IF seen.${neigh.as};
+  NEXT;
+ELSE;
+  seen.${neigh.as} = 1;
+END;
+%]
+function bgp_[% neigh.name %]_in(int peeras)
+prefix set [% neigh.name %]_in;
+{
+	[% neigh.name %]_in = [
+[% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
+	];
+	if !(bgp_in(peeras)) then return false;
+	if !(net ~ [% neigh.name %]_in) then return false;
+	return true;
+}
+
+table T_[% neigh.name | upper %];
+
+protocol pipe P_[% neigh.name | upper %] {
+	table master;
+	mode transparent;
+	peer table T_[% neigh.name | upper %];
+	/* routes from the global table to [% neigh.name %] */
+	export where bgp_out([% neigh.as %]) = true;
+	/* routes from [% neigh.name %] to the global table */
+	import where bgp_[% neigh.name %]_in([% neigh.as %]) = true;
+}
+
+
+[% END %]
+
+/****************************************************************************/
+/* http://bird.network.cz/?get_doc&f=bird-6.html */
+
+[% seen = [] %]
+[% FOREACH ip = conf.keys.ipsort %]
+[%
+neigh = conf.$ip;
+
+# Use a different name when there are multiple neighbors from the same AS.
+# The regexp needs to be modified if the peering network is > /24.
+IF seen.${neigh.as};
+  extraname = '_' _ ip.remove('^.+[\.:]');
+ELSE;
+  seen.${neigh.as} = 1;
+  extraname = '';
+END;
+%]
+protocol bgp [% neigh.name | upper %][% extraname %] {
+[% IF neigh.description %]
+	description "[% neigh.description %]";
+[% END %]
+	neighbor [% ip %] as [% neigh.as %];
+	local as [% var.myasn %];
+	table T_[% neigh.name | upper %];
+	rs client;
+	interpret communities no;
+[% IF neigh.maxpref %]
+	route limit [% neigh.maxpref %];
+[% ELSE %]
+	route limit 1000;
+[% END %]
+#	hold time 24;
+#	keepalive time 7;
+	connect retry time 3600;
+	passive;
+	import all;
+	export all;
+[% FOREACH cmd = neigh.custom_commands %]
+	[% cmd %];
+[% END %]
+}
+
+[% END %]
+
+/* END OF FILE MARKER */
+

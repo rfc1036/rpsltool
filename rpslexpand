@@ -10,7 +10,7 @@
 use warnings;
 use strict;
 
-use YAML qw(Load LoadFile);
+use YAML::XS qw(Load LoadFile);
 use Getopt::Long;
 use FindBin;
 

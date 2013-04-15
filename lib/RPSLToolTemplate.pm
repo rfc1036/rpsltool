@@ -56,8 +56,11 @@ $context->define_vmethod('list', 'ipsort' => sub {
 	return map {
 		$_->[0]
 	} sort {
-		 $a->[1]->bincomp('lt', $b->[1]) ? -1 :
-		($a->[1]->bincomp('gt', $b->[1]) ?  1 : 0)
+		$a->[2] <=> $b->[2] ||
+		($a->[1]->bincomp('lt', $b->[1]) ? -1 :
+		($a->[1]->bincomp('gt', $b->[1]) ?  1 : 0))
+	} map {
+		[ @$_, $_->[1]->version ]
 	} map {
 		[ $_, (Net::IP->new($_) or die "Not an IP: $_") ]
 	} @$networks;

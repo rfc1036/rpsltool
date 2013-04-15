@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright 2005, 2006 by Marco d'Itri <md@linux.it>
+# Copyright 2005-2010 by Marco d'Itri <md@linux.it>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -10,7 +10,7 @@
 use warnings;
 use strict;
 
-use YAML;
+use YAML::XS;
 use Net::IP;
 use Template;
 use Storable qw(dclone);
@@ -151,7 +151,10 @@ sub print_template {
 	$template->create_net_vmethods;
 	$template->create_whois_vmethods($whois);
 
-	$input = join("\n", grep(!/^#/, @$input));
+	# discard the shebang line, if present
+	shift @$input if @$input and $input->[0] =~ m|^#!\s*/|;
+
+	$input = join("\n", @$input);
 
 	my $output;
 	$template->process(\$input, $vars, \$output) or die $template->error;
@@ -168,8 +171,23 @@ sub Template::create_vmethods {
 	my $context = $template->context;
 
 $context->define_vmethod('scalar', 'route2cisco' => \&route2cisco);
+$context->define_vmethod('scalar', 'route2bird'  => \&route2bird);
 $context->define_vmethod('scalar', 'route2acl'   => \&route2acl);
 $context->define_vmethod('scalar', 'route2stdacl' => \&route2stdacl);
+
+# list versions of the precedently defined vmethods
+$context->define_vmethod('list', 'route2cisco'  => sub {
+	map { route2cisco($_)  } @{$_[0]}
+});
+$context->define_vmethod('list', 'route2bird'   => sub {
+	map { route2bird($_)   } @{$_[0]}
+});
+$context->define_vmethod('list', 'route2acl'    => sub {
+	map { route2acl($_)    } @{$_[0]}
+});
+$context->define_vmethod('list', 'route2stdacl' => sub {
+	map { route2stdacl($_) } @{$_[0]}
+});
 
 $context->define_vmethod('list', 'hostroutes' => sub {
     map {
@@ -192,24 +210,49 @@ sub route2cisco {
 		$
 	!ox;
 
-	my $s;
 	if (not $prefix or not $len) {
 		die "Cannot parse this prefix: '$_'\n";
 	} elsif (not $range) {
-		$s .= "$prefix/$len";
+		return "$prefix/$len";
 	} elsif ($range eq '-') {
-		$s .= "$prefix/$len gt $range";
+		return "$prefix/$len gt $len";
 	} elsif ($range eq '+') {
-		$s .= "$prefix/$len ge $range";
-	} elsif ($range =~ /^[0-9]+$/) {
-		$s .= "$prefix/$len le $range";
+		return "$prefix/$len ge $len";
+	} elsif ($range =~ /^([0-9]+)$/) {
+		return "$prefix/$len ge $1 le $1";
 	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
-		$s .= "$prefix/$len ge $1 le $2";
+		return "$prefix/$len ge $1 le $2";
 	} else {
 		die "Cannot parse this prefix: '$_'\n";
 	}
+}
 
-	return $s
+# converts a prefix with an optional RPSL-like length filter to a BIRD prefix
+sub route2bird {
+	my ($prefix, $len, $range) = $_[0] =~ m!
+		^([0-9\.:a-fA-F]+)		# prefix
+		/([0-9]+)				# length
+		(?:\^ ([0-9\+\-]+) )?	# optional range
+		$
+	!ox;
+
+	if (not $prefix or not $len) {
+		die "Cannot parse this prefix: '$_'\n";
+	} elsif (not $range) {
+		return "$prefix/$len";
+	} elsif ($range eq '-') {
+		my $min = $len + 1;
+		my $max = $prefix =~ /:/ ? 128 : 32;
+		return "$prefix/$len\{$min,$max}";
+	} elsif ($range eq '+') {
+		return "$prefix/$len+";
+	} elsif ($range =~ /^([0-9]+)$/) {
+		return "$prefix/$len\{$1,$1}";
+	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
+		return "$prefix/$len\{$1,$2}";
+	} else {
+		die "Cannot parse this prefix: '$_'\n";
+	}
 }
 
 # converts a prefix with an optional RPSL-like length filter to
@@ -241,6 +284,7 @@ sub route2stdacl {
 	return $prefix . ' ' . join('.', unpack('CCCC', pack('B*', $bits)));
 }
 
+##############################################################################
 sub usage {
 	print STDERR <<END;
 Usage: rpsltool CONFIG-FILE

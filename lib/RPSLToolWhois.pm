@@ -24,7 +24,7 @@ sub whois_factory {
 	# This is used by the whois server operator to identify different clients
 	# and should be changed if you use this function with your own programs.
 	$whois->{FLAG_V} =
-		$param->{client_name} ? '-V'.$param->{client_name} : '-Vrpsltool-1.4';
+		$param->{client_name} ? '-V'.$param->{client_name} : '-Vrpsltool-1.5';
 
 	# setup the query cache
 	my $cache = new Cache::FileCache({

@@ -1,3 +1,14 @@
+1.5
+Added complete examples for building BIRD and OpenBGPd route servers for
+an internet exchange.
+Fixed the prefix^len, prefix^+ and prefix- cases of the route2cisco VMethod.
+Added a route2bird VMethod to convert prefixes to the BIRD format.
+Added list versions of all the route2* scalar VMethods.
+Improved the ipsort VMethod to sort all v4 addresses before v6 addresses.
+Stopped ignoring all template lines starting with "#" and only remove the
+initial shebang line, if present.
+Switched from YAML to YAML::XS.
+
 1.4
 Removed support for the asdot format in database objects, which conveniently
 fixes support for asplain format in database objects.

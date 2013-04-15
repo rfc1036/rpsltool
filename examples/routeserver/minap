@@ -1,0 +1,50 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=yaml shiftwidth=2 expandtab autoindent
+--- #YAML:1.0
+# Misc parameters.
+template: minap-bird.tt2
+cache_root: /home/admin/rpsltool
+cache_depth: 0
+
+---
+# Template variables.
+myasn: 64725
+ipv6: n
+
+---
+# Details about the peers.
+
+- as: 47880
+  description: New Media Labs
+  name: newmedialabs
+  import: AS47880
+  ip: 92.60.70.1
+
+- as: 250
+  description: AS250.net
+  import: AS250:AS-TO-PEERING-MINAP
+  ip: 92.60.70.3
+  disabled: y
+
+- as: 12637
+  description: Seeweb
+  import: AS12637:AS-CUSTOMERS
+  ip: 92.60.70.5
+  custom_commands: "disable after error yes"
+
+- as: 47880
+  description: New Media Labs
+  name: newmedialabs
+  import: AS47880
+  ip: 2a01:658:ffff::a004:7880:1
+
+- as: 250
+  description: AS250.net
+  import: AS250:AS-TO-PEERING-MINAP
+  ip: 2a01:658:ffff::a000:250:1
+
+- as: 12637
+  description: Seeweb
+  import: AS12637:AS-CUSTOMERS
+  ip: 2a01:658:ffff::a001:2637:1
+

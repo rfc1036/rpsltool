@@ -1,0 +1,8 @@
+This is an extract of the configuration used at MINAP (http://www.minap.it/).
+
+One common configuration file (minap) is used with two templates (*.tt2)
+to generate three different configuration files: one for OpenBGPd by
+changing the "template" parameter and one for the IPv6 BIRD instance
+(which uses the same template of the IPv4 one) by changing the "ipv6"
+template variable.
+

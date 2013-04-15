@@ -1,0 +1,6 @@
+#!/bin/sh -e
+
+sed -re '/^ipv6:/s/\<n\>/y/' \
+  < minap \
+  | exec rpsltool -
+

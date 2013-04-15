@@ -1,0 +1,27 @@
+#!/usr/bin/env rpsltool
+! This file generates a "default deny" configuration fragment to be used
+! when peering with a routes server.
+
+[% peers = BLOCK %]
+1234
+5678
+[% END %] 
+[%
+var.myasn = 12779;
+
+aslist = peers.split.nsort;
+aslist2 = peers.split.nsort;
+%]
+
+no ip as-path access-list 91
+[% WHILE aslist2.size; l = aslist2.splice(0, 35) %]
+ip as-path access-list 91 permit ^([% l.join('|') %])_
+[% END %]
+
+no route-map MIX-RS-OUT permit 60000
+route-map MIX-RS-OUT permit 60000
+ match community CUSTOMER
+ set community 0:[% var.myasn %] [% FOREACH as = aslist %]
+[% var.myasn %]:[% as %] [% %]
+[% END %]additive
+

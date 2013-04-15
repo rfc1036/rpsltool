@@ -25,8 +25,6 @@ Elements of the neighbors list with the "template: y" variable are a set
 of default parameters to be used for the following neighbors (until a new
 template element is defined).
 
-Lines beginning with a # are considered comments. This is an extension
-to the YAML syntax.
 These files can be made executable and run as scripts by using something
 like "#!/usr/bin/env rpsltool" as their first line.
 

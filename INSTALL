@@ -1,7 +1,7 @@
 The following perl modules are needed:
 
 Net::Whois::RIPE >= 1.23	# libnet-whois-ripe-perl
-YAML				# libyaml-perl
+YAML::XS			# libyaml-libyaml-perl
 Cache::FileCache		# libcache-cache-perl
 Net::IP				# libnet-ip-perl
 Template			# libtemplate-perl

@@ -1,0 +1,98 @@
+[%
+# vim: syntax=tt2 shiftwidth=2 expandtab autoindent
+USE date;
+
+# determine the "short" alphanumeric name of each neighbor
+FOREACH ip = conf.keys;
+  IF conf.$ip.name;
+    conf.$ip.name = conf.$ip.name | lower;
+  ELSIF conf.$ip.description;
+    conf.$ip.name = conf.$ip.description.replace('^([a-zA-Z0-9]+).*', '$1') | lower;
+  ELSE;
+    conf.$ip.name = 'as' _ conf.$ip.as;
+  END;
+END;
+
+%]
+##############################################################################
+#
+# OpenBGPd configuration for rs-o.minap.it
+# Generated on [% date.format(date.now, '%F %T') %].
+#
+##############################################################################
+
+AS [% var.myasn +%]
+router-id 92.60.70.253
+listen on 2a01:658:ffff::253
+listen on 92.60.70.253
+
+transparent-as yes
+log updates
+fib-update no
+
+[% seen = [] %]
+[% FOREACH ip = conf.keys.ipsort %]
+[%
+neigh = conf.$ip;
+
+# generate the configuration once even if the AS has multiple addresses
+IF seen.${neigh.as};
+  NEXT;
+ELSE;
+  seen.${neigh.as} = 1;
+END;
+%]
+rde rib [% neigh.name +%]
+[% END %]
+
+group "RS" {
+  announce all
+  max-prefix 1000 restart 15
+  set nexthop no-modify
+
+[% FOREACH ip = conf.keys.ipsort %]
+[% neigh = conf.$ip %]
+  neighbor [% ip %] {
+[% IF neigh.description %]
+    descr "[% neigh.description %]"
+[% END %]
+    remote-as [% neigh.as +%]
+    rib [% neigh.name +%]
+[% IF neigh.maxpref %]
+    max-prefix [% neigh.maxpref %] restart 15
+[% END %]
+    passive
+  }
+[% END %]
+}
+
+deny from any inet prefixlen 8 >< 24
+
+deny from any inet prefix 0.0.0.0/0
+deny from any prefix 10.0.0.0/8 prefixlen >= 8
+deny from any prefix 192.168.0.0/16 prefixlen >= 16
+deny from any prefix 172.16.0.0/12 prefixlen >= 12
+deny from any prefix 127.0.0.0/8 prefixlen >= 8
+deny from any prefix 169.254.0.0/16 prefixlen >= 16
+deny from any prefix 224.0.0.0/4 prefixlen >= 4
+deny from any prefix 240.0.0.0/4 prefixlen >= 4
+
+deny  to group RS community 0:neighbor-as
+allow to group RS community [% var.myasn %]:neighbor-as
+deny  to group RS community 0:[% var.myasn +%]
+allow to group RS community [% var.myasn %]:[% var.myasn +%]
+
+[% FOREACH ip = conf.keys.ipsort %]
+[%
+neigh = conf.$ip;
+afi = ip.match(':') ? 'ipv6' : 'ipv4';
+%]
+# routes from [% neigh.description %] (AS[% neigh.as %])
+[% FOREACH pfx IN neigh.$afi.import_routes.ipsort %]
+allow quick from [% ip %] prefix [% pfx +%]
+[% END %]
+
+[% END %]
+
+## END OF FILE MARKER ##
+
