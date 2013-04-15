@@ -63,7 +63,7 @@ sub process_peers_config {
 			# import some values from the global peer configuration,
 			# if they are not defined for the AFI
 			foreach my $attr qw(import unimport default_aspath_filter
-					maxpref peergroup) {
+					maxpref peergroup localpref metric) {
 				next if exists $peer->{$afi}->{$attr} or
 					not exists $peer->{$attr};
 				$peer->{$afi}->{$attr} = $peer->{$attr};

@@ -1,3 +1,11 @@
+1.2
+Added neighbor level variables "localpref" and "metric", inheritable from
+neighbor templates.
+cisco-full.tt2: modified to use the "localpref" and "metric" per-neighbor
+variables instead of the generic global variables.
+cisco-full.tt2: fixed typos in the multicast route-maps.
+cisco-full.tt2: renamed the peer-groups.
+
 1.1
 Added the route2acl scalar pseudomethod which converts a prefix in a
 network/netmask pair separated by a space, to be used in IOS ACLs.

@@ -9,18 +9,14 @@ cache_root: /home/md/rpsltool
 akamai: 65000:65198
 ipv4:
   customers:
-    localpref: 350
     community: 65000:65000
   peers:
-    localpref: 250
-    community: 65000:65002
+    community: 65000:65002 65000:65100
 ipv6:
   customers:
-    localpref: 350
     community: 65000:65000
   peers:
-    localpref: 250
-    community: 65000:65002
+    community: 65000:65002 65000:65100
 
 ---
 # Details about the peers.
@@ -34,6 +30,7 @@ ipv6:
 - template: y
   customer: y
   disabled: y
+  localpref: 40000
 
 - as: 8674
   description: I-ROOT
@@ -56,6 +53,8 @@ ipv6:
   customer: n
   peergroup: MIX-IT-IPv4
   default_aspath_filter: y
+  localpref: 150
+  metric: 10000
 
 - as: 137
   description: GARR
@@ -90,6 +89,8 @@ ipv6:
 - template: y
   customer: n
   peergroup: MIX-IT-IPv6
+  localpref: 150
+  metric: 10000
 
 - as: 3257
   description: Tiscali
