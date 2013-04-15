@@ -11,7 +11,8 @@ User-Agent: nagpeer/1.0
 After a periodical revision of our BGP filters, we determined some
 inconsistencies between the set of networks announced by your
 autonomous system AS[% as %] and those registered in the RIPE
-database with the expansion of your as-set object [% top_object %].
+database with the expansion of your [% IF top_object.match('^AS-') -%]
+as-set[% ELSE %]aut-num[% END %] object [% top_object %].
 
 Specifically:
 [% IF asn.size %]

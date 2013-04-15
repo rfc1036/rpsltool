@@ -62,12 +62,13 @@ my $peers = process_peers_config($peers_config);
 my $whois = whois_factory($param);
 
 if ($report_mode) {
+	process_extra_config($peers, $param);
 	iterate_peers($peers, sub {
 		my ($peer, $afi) = @_;
-		return if not $peer->{import} or $peer->{is_backup};
+		return if not $peer->{$afi}->{import} or $peer->{is_backup}
+			or $peer->{$afi}->{skip};
 		compare_routes_received_irr($peer, $param, $whois, $afi);
 	});
-	parse_leaks($peers, $param);
 	create_web_page($peers, $param);
 	exit;
 }
@@ -174,6 +175,7 @@ sub create_web_page {
 	my $template = Template->new({
 		POST_CHOMP	=> 1,
 		DEBUG_UNDEF	=> 1,
+		ABSOLUTE	=> 1,
 	}) or early_error("Template->new: $Template::ERROR");
 
 	$template->create_net_vmethods;
@@ -188,15 +190,20 @@ sub create_web_page {
 }
 
 ##############################################################################
-sub parse_leaks {
+sub process_extra_config {
 	my ($peers, $param) = @_;
 
 	iterate_peers($peers, sub {
 		my ($peer, $afi) = @_;
-		return unless $peer->{ip} and $param->{leaks}->{$peer->{ip}};
-
+		return unless $peer->{ip};
+		
 		$peer->{$afi}->{leak} =
-			{ map { $_ => 1 } @{$param->{leaks}->{$peer->{ip}}} };
+				{ map { $_ => 1 } @{$param->{leaks}->{$peer->{ip}}} }
+			if $param->{leaks}->{$peer->{ip}};
+		$peer->{$afi}->{note} = $param->{notes}->{$peer->{ip}}
+			if $param->{notes}->{$peer->{ip}};
+		$peer->{$afi}->{skip} = 1
+			if $param->{skip} and grep(/^$peer->{ip}$/i, @{$param->{skip}});
 	});
 }
 
@@ -228,6 +235,7 @@ sub create_notice {
 	my $template = Template->new({
 		POST_CHOMP	=> 1,
 		DEBUG_UNDEF	=> 1,
+		ABSOLUTE	=> 1,
 	}) or early_error("Template->new: $Template::ERROR");
 
 	$template->create_net_vmethods;

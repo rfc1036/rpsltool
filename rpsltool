@@ -164,6 +164,7 @@ sub Template::create_vmethods {
 	my $context = $template->context;
 
 $context->define_vmethod('scalar', 'route2cisco' => \&route2cisco);
+$context->define_vmethod('scalar', 'route2acl'   => \&route2acl);
 
 $context->define_vmethod('list', 'hostroutes' => sub {
     map {
@@ -203,6 +204,20 @@ sub route2cisco {
 	}
 
 	return $s
+}
+
+# converts a prefix with an optional RPSL-like length filter to
+# a network/netmask pair separated by a space
+sub route2acl {
+	my ($prefix, $len) = $_[0] =~ m!
+		^([0-9\.:a-fA-F]+)		# prefix
+		/([0-9]+)				# length
+		(?:\^ [0-9\+\-]+ )?		# ignored range
+	$!ox;
+
+	$len = 32 if $len > 32 or $len < 0;
+	my $bits = '1' x $len . '0' x (32 - $len);
+	return $prefix . ' ' . join('.', unpack('CCCC', pack('B*', $bits)));
 }
 
 sub usage {

@@ -1,3 +1,15 @@
+1.1
+Added the route2acl scalar pseudomethod which converts a prefix in a
+network/netmask pair separated by a space, to be used in IOS ACLs.
+cisco-full.tt2: added some example code which uses route2acl to generate
+uRPF ACLs.
+cisco-full.tt2: do not set the peer-group in each AFI because it is not
+needed by recent IOS releases and confuses some like 12.2(28)SB.
+cisco-full.tt2: fixed some bugs in unusual configurations.
+nagpeer: accept absolute paths for the template files.
+nagpeer.*mail.tt2: correctly use "aut-num" or "as-set" in the text.
+nagpeer: added support to add per-peer notes in the HTML report.
+
 1.0
 Modularized and cleaned up the code.
 Added the routesdiff program (formerly part of my cisco-tools package),

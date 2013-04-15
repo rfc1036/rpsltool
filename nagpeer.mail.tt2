@@ -11,7 +11,8 @@ User-Agent: nagpeer/1.0
 Durante la revisione periodica dei nostri filtri BGP sono state rilevate
 delle incongruenze tra le reti annunciate dal vostro autonomous system
 AS[% as %] e quelle dichiarate nel database di RIPE con l'espansione del
-vostro oggetto as-set [% top_object %].
+vostro oggetto [% IF top_object.match('^AS-') -%]
+as-set[% ELSE %]aut-num[% END %] [% top_object %].
 
 In dettaglio:
 [% IF asn.size %]

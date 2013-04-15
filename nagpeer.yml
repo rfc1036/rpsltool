@@ -49,7 +49,20 @@ contacts:
 # specially marked in the HTML report.
 leaks:
  217.29.66.4:  [ AS12498, AS3313, 193.108.186.0/24, 193.193.183.0/24 ]
- 217.29.66.29: [ AS15589, 212.90.0.0/19, AS8968, 213.183.151.0/24 ]
- 217.29.66.68: [ AS174, AS286, AS2856, AS3215, AS3549, AS3257, AS8881, AS12641, AS12876 ]
- 217.29.66.69: [ AS174, AS286, AS1239, AS2914, AS5511,   AS6395, AS16422,   AS6461, AS20562,  AS8220, AS20734,  AS6666,  AS11840, AS26134, AS10913 ]
+ 217.29.66.68: [ AS174, AS286, AS2856, AS3215, AS3549, AS3257, AS8881, AS12641, AS12876, AS25186 ]
+ 217.29.66.69: [ AS174, AS286, AS701, AS1239, AS2914, AS5511, AS6762, AS8220, AS20734 ]
+ 217.29.66.7:  [ AS174 ]
+
+notes:
+ "2001:7F8:B:100:1D1:A5D0:4589:7": "Publishes the AS-EASYNET6 as-set, but the routes from their japanese peers are not in the IRR anyway so I am not using it."
+ 217.29.66.12: "Mostly deaggregation by AS5397."
+ 217.29.66.17: "Actually all ASN are registered in RADB, but my configuration uses only the RIPE IRR and misses the expansion of one as-set."
+ 217.29.66.24: "Registered with an old origin and never updated."
+ 217.29.66.4:  "193.108.186.0/24 and 193.193.183.0/24 are the routes of a former customer which left months (years?) ago and now are learnt at MIX-IT and then leaked. Has an history of similar leaks."
+ 217.29.66.58: "A /23 announced deaggregated."
+ 217.29.66.68: "Has a few long-standing leaks."
+ 217.29.66.69: "Has a few long-standing leaks."
+ 217.29.66.7:  "Actually all routes are registered in RADB, but my configuration uses only the RIPE IRR."
+
+skip: [ 217.29.66.17, 217.29.66.7 ]
 
