@@ -170,9 +170,10 @@ sub Template::create_vmethods {
 
 	my $context = $template->context;
 
-$context->define_vmethod('scalar', 'route2cisco' => \&route2cisco);
-$context->define_vmethod('scalar', 'route2bird'  => \&route2bird);
-$context->define_vmethod('scalar', 'route2acl'   => \&route2acl);
+$context->define_vmethod('scalar', 'route2cisco'  => \&route2cisco);
+$context->define_vmethod('scalar', 'route2bird'   => \&route2bird);
+$context->define_vmethod('scalar', 'route2junos'  => \&route2junos);
+$context->define_vmethod('scalar', 'route2acl'    => \&route2acl);
 $context->define_vmethod('scalar', 'route2stdacl' => \&route2stdacl);
 
 # list versions of the precedently defined vmethods
@@ -181,6 +182,9 @@ $context->define_vmethod('list', 'route2cisco'  => sub {
 });
 $context->define_vmethod('list', 'route2bird'   => sub {
 	map { route2bird($_)   } @{$_[0]}
+});
+$context->define_vmethod('list', 'route2junos'  => sub {
+	map { route2junos($_)  } @{$_[0]}
 });
 $context->define_vmethod('list', 'route2acl'    => sub {
 	map { route2acl($_)    } @{$_[0]}
@@ -250,6 +254,32 @@ sub route2bird {
 		return "$prefix/$len\{$1,$1}";
 	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
 		return "$prefix/$len\{$1,$2}";
+	} else {
+		die "Cannot parse this prefix: '$_'\n";
+	}
+}
+
+# converts a prefix with an optional RPSL-like length filter to a Junos prefix
+sub route2junos {
+	my ($prefix, $len, $range) = $_[0] =~ m!
+		^([0-9\.:a-fA-F]+)		# prefix
+		/([0-9]+)				# length
+		(?:\^ ([0-9\+\-]+) )?	# optional range
+		$
+	!ox;
+
+	if (not $prefix or not $len) {
+		die "Cannot parse this prefix: '$_'\n";
+	} elsif (not $range) {
+		return "$prefix/$len exact";
+	} elsif ($range eq '-') {
+		return "$prefix/$len longer";
+	} elsif ($range eq '+') {
+		return "$prefix/$len orlonger";
+	} elsif ($range =~ /^([0-9]+)$/) {
+		return "$prefix/$len prefix length range /$1-/$1";
+	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
+		return "$prefix/$len prefix length range /$1-/$2";
 	} else {
 		die "Cannot parse this prefix: '$_'\n";
 	}
