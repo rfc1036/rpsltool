@@ -24,7 +24,7 @@ sub whois_factory {
 	# This is used by the whois server operator to identify different clients
 	# and should be changed if you use this function with your own programs.
 	$whois->{FLAG_V} =
-		$param->{client_name} ? '-V'.$param->{client_name} : '-Vrpsltool-1.3';
+		$param->{client_name} ? '-V'.$param->{client_name} : '-Vrpsltool-1.4';
 
 	# setup the query cache
 	my $cache = new Cache::FileCache({
@@ -63,7 +63,7 @@ my ($v6route, $v4route, $aut_num, $as_set, $route_set, $routes_range);
 
 $v6route		= qr/[:0-9a-fA-F\/^\-\+]+/;
 $v4route		= qr/[\.0-9\/^\-\+]+/;
-$aut_num		= qr/[Aa][Ss][0-9]+(?:\.[0-9]+)?/;
+$aut_num		= qr/[Aa][Ss][0-9]+/;
 $as_set			= qr/(?:$aut_num:)?[Aa][Ss]-[:A-Za-z0-9_\-]+/;
 $route_set		= qr/(?:$aut_num:)?[Rr][Ss]-[:A-Za-z0-9_\-]+/;
 $routes_range	= qr/[0-9\+\-]+/;

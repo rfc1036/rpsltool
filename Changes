@@ -1,3 +1,12 @@
+1.4
+Removed support for the asdot format in database objects, which conveniently
+fixes support for asplain format in database objects.
+Added a route2stdacl scalar pseudomethod like route2acl but for standard
+ACLs. Fixed the ACL examples in the templates.
+Fixed the aggregate() function to also aggregate overlapping networks.
+Fixed the unimport directive to understand as-sets too.
+Updated the default template with cleaner code and cool features.
+
 1.3
 Added support for ASN32: each ASN32 returned by RPSL expansion will be
 replaced by AS23456 (AS_TRANS) unless the neighbor level boolean variable

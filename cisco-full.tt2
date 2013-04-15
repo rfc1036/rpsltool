@@ -1,7 +1,47 @@
+[% # This code determines the names of the route-maps and ACLs
+  FOREACH ip = conf.keys.sort;
+    FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ];
+      NEXT IF NOT conf.$ip.$afi;
+      neigh = conf.$ip;
+      x = neigh.$afi;
+      IF ip.match('^92\.60\.70\.') OR ip.match('^2a01:658:ffff:');
+        mapixname = '-MINAP';
+      ELSE;
+        mapixname = '';
+      END;
+      aclixname = '';
+
+      IF    afi == 'ipv4';
+        aclsuffix = '-IN';
+        x.rpfaclname = 'URPF-AS'  _ neigh.as _ ixname;
+      ELSIF afi == 'ipv6';
+        aclsuffix = '-IN6';
+        x.rpfaclname = 'URPF6-AS' _ neigh.as _ ixname;
+      ELSIF afi == 'ipv4m';
+        aclsuffix = '-INM';
+      ELSIF afi == 'ipv6m';
+        aclsuffix = '-IN6M';
+      ELSE;
+        THROW 'Unknown AFI';
+      END;
+
+      IF NOT x.aclname;
+        x.aclname = 'AS' _ neigh.as _ aclixname _ aclsuffix;
+      END;
+      IF NOT x.mapname;
+        x.mapname = 'AS' _ neigh.as _ mapixname _ aclsuffix;
+      END;
+
+    END;
+  END;
+%]
 ! lists !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 [% FOREACH ip = conf.keys.sort %]
 [% neigh = conf.$ip %]
 [% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% IF seen.pl.${neigh.$afi.aslistnum}; NEXT;
+   ELSE; seen.pl.${neigh.$afi.aslistnum} = 1; END
+%]
 [% NEXT IF NOT neigh.$afi.import_as.size %]
 no ip as-path access-list [% neigh.$afi.aslistnum +%]
 [% aslist = neigh.$afi.import_as.nsort %]
@@ -19,42 +59,43 @@ ip as-path access-list [% neigh.$afi.aslistnum %] permit ^(_([% aslist.join('|')
 [% FOREACH ip = conf.keys.sort %]
 [% neigh = conf.$ip %]
 [% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
-[% IF    afi == 'ipv6';
-     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6';
-   ELSIF afi == 'ipv6m';
-     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6M';
-   ELSIF afi == 'ipv4m';
-     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-INM';
-   ELSE;
-     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-IN';
-   END;
+[% IF seen.pl.${neigh.$afi.aclname}; NEXT;
+   ELSE; seen.pl.${neigh.$afi.aclname} = 1; END
 %]
+[% IF afi.match('6'); acltype = 'ipv6'; ELSE; acltype = 'ip'; END %]
 [% NEXT IF NOT neigh.$afi.import_routes.size %]
-no [% acltype %] prefix-list [% aclname +%]
+no [% acltype %] prefix-list [% neigh.$afi.aclname +%]
 [% FOREACH route = neigh.$afi.import_routes %]
-[% acltype %] prefix-list [% aclname %] permit [% route.route2cisco +%]
+[% acltype %] prefix-list [% neigh.$afi.aclname %] permit [% route.route2cisco +%]
 [% END %]
 !
 [% IF neigh.customer %]
-no [% acltype %] prefix-list [% aclname +%]-HR
+no [% acltype %] prefix-list [% neigh.$afi.aclname +%]-HR
 [% FOREACH route = neigh.$afi.import_routes.hostroutes %]
-[% acltype %] prefix-list [% aclname %]-HR permit [% route.route2cisco +%]
+[% acltype %] prefix-list [% neigh.$afi.aclname %]-HR permit [% route.route2cisco +%]
 [% END %]
 !
 [% END %]
 [% IF neigh.rpfacl %]
 [% IF afi.match('^ipv4') %]
-no ip access-list standard [% aclname +%]
-ip access-list standard [% aclname +%]
-[% FOREACH route = neigh.$afi.import_routes %]
- permit [% route.route2acl +%]
+no ip access-list standard [% neigh.$afi.rpfaclname +%]
+ip access-list standard [% neigh.$afi.rpfaclname +%]
+ remark [% neigh.description +%]
+ permit [% neigh.ip %] 0.0.0.0
+[% FOREACH route = neigh.$afi.import_routes.aggregate %]
+ permit [% route.route2stdacl +%]
 [% END %]
+ deny 0.0.0.0 255.255.255.255
 [% ELSE %]
-no ipv6 access-list [% aclname +%]
-ipv6 access-list [% aclname +%]
-[% FOREACH route = neigh.$afi.import_routes %]
+no ipv6 access-list [% neigh.$afi.rpfaclname +%]
+ipv6 access-list [% neigh.$afi.rpfaclname +%]
+ remark [% neigh.description +%]
+ permit fe80::/10 any
+ permit [% neigh.ip %]/128 any
+[% FOREACH route = neigh.$afi.import_routes.aggregate %]
  permit [% route +%] any
 [% END %]
+ deny any any
 [% END %]
 !
 [% END %]
@@ -66,23 +107,24 @@ ipv6 access-list [% aclname +%]
 [% neigh = conf.$ip %]
 [% NEXT IF NOT neigh.ipv4 %]
 [% NEXT IF neigh.is_backup %]
+[% mapname = neigh.ipv4.mapname %]
 [% IF neigh.customer AND neigh.ipv4.import_routes.size %]
-no route-map AS[% neigh.as %]-IN permit 9000
-route-map AS[% neigh.as %]-IN permit 9000
+no route-map [% mapname %] permit 9000
+route-map [% mapname %] permit 9000
  match community BLACKHOLE
- match ip address prefix-list AS[% neigh.as %]-IN-HR
+ match ip address prefix-list [% neigh.ipv4.aclname %]-HR
  set comm-list REMOVE-LOCAL delete
  set local-preference [% neigh.ipv4.localpref +%]
  set ip next-hop 10.255.255.254
 !
 [% END %]
-no route-map AS[% neigh.as %]-IN permit 10000
-route-map AS[% neigh.as %]-IN permit 10000
+no route-map [% mapname %] permit 10000
+route-map [% mapname %] permit 10000
 [% IF neigh.description %]
  description Routes from [% neigh.description +%]
 [% END %]
 [% IF neigh.ipv4.import_routes.size %]
- match ip address prefix-list AS[% neigh.as %]-IN
+ match ip address prefix-list [% neigh.ipv4.aclname +%]
 [% ELSE %]
  match ip address prefix-list INBOUND-FILTER
 [% END %]
@@ -108,10 +150,11 @@ route-map AS[% neigh.as %]-IN permit 10000
 [% neigh = conf.$ip %]
 [% NEXT IF NOT neigh.ipv4m %]
 [% NEXT IF neigh.is_backup %]
-no route-map AS[% neigh.as %]-INM permit 10000
-route-map AS[% neigh.as %]-INM permit 10000
+[% mapname = neigh.ipv4m.mapname %]
+no route-map [% mapname %] permit 10000
+route-map [% mapname %] permit 10000
 [% IF neigh.ipv4m.import_routes.size %]
- match ip address prefix-list AS[% neigh.as %]-INM
+ match ip address prefix-list [% neigh.ipv4m.aclname +%]
 [% END %]
 [% IF neigh.ipv4m.aslistnum %]
  match as-path [% neigh.ipv4m.aslistnum +%]
@@ -135,20 +178,21 @@ route-map AS[% neigh.as %]-INM permit 10000
 [% neigh = conf.$ip %]
 [% NEXT IF NOT neigh.ipv6 %]
 [% NEXT IF neigh.is_backup %]
+[% mapname = neigh.ipv6.mapname %]
 [% IF neigh.customer AND neigh.ipv6.import_routes.size %]
-no route-map AS[% neigh.as %]-IN6 permit 9000
-route-map AS[% neigh.as %]-IN6 permit 9000
+no route-map [% mapname %] permit 9000
+route-map [% mapname %] permit 9000
  match community BLACKHOLE
- match ipv6 address prefix-list AS[% neigh.as %]-IN6-HR
+ match ipv6 address prefix-list [% neigh.ipv6.aclname %]-HR
  set comm-list REMOVE-LOCAL delete
  set local-preference [% neigh.ipv6.localpref +%]
  set ipv6 next-hop 2001:1418::FFFF:FFFF
 !
 [% END %]
-no route-map AS[% neigh.as %]-IN6 permit 10000
-route-map AS[% neigh.as %]-IN6 permit 10000
+no route-map [% mapname %] permit 10000
+route-map [% mapname %] permit 10000
 [% IF neigh.ipv6.import_routes.size %]
- match ipv6 address prefix-list AS[% neigh.as %]-IN6
+ match ipv6 address prefix-list [% neigh.ipv6.aclname +%]
 [% ELSE %]
  match ipv6 address prefix-list INBOUND-FILTER6
 [% END %]
@@ -161,7 +205,11 @@ route-map AS[% neigh.as %]-IN6 permit 10000
  set community [% var.ipv6.customers.community %] additive
 [% ELSE %]
  set local-preference [% neigh.ipv6.localpref +%]
+[% IF neigh.ipv6.community %]
+ set community [% neigh.ipv6.community %] additive
+[% ELSE %]
  set community [% var.ipv6.peers.community %] additive
+[% END %]
 [% END %]
 [% IF neigh.ipv6.metric %]
  set metric [% neigh.ipv6.metric +%]
@@ -174,10 +222,11 @@ route-map AS[% neigh.as %]-IN6 permit 10000
 [% neigh = conf.$ip %]
 [% NEXT IF NOT neigh.ipv6m %]
 [% NEXT IF neigh.is_backup %]
-no route-map AS[% neigh.as %]-IN6M permit 10000
-route-map AS[% neigh.as %]-IN6M permit 10000
+[% mapname = neigh.ipv6m.mapname %]
+no route-map [% mapname %] permit 10000
+route-map [% mapname %] permit 10000
 [% IF neigh.ipv6m.import_routes.size %]
- match ipv6 address prefix-list AS[% neigh.as %]-IN6M
+ match ipv6 address prefix-list [% neigh.ipv6m.aclname +%]
 [% END %]
 [% IF neigh.ipv6m.aslistnum %]
  match as-path [% neigh.ipv6m.aslistnum +%]
@@ -277,7 +326,7 @@ router bgp 65000
  neighbor [% ip %] soft-reconfiguration inbound
  neighbor [% ip %] route-map AS[% neigh.as %]-OUT out
 [% END %]
- neighbor [% ip %] route-map AS[% neigh.as %]-IN in
+ neighbor [% ip %] route-map [% neigh.ipv4.mapname %] in
 [% IF neigh.ipv4.maxpref %]
  neighbor [% ip %] maximum-prefix [% neigh.ipv4.maxpref %] 85
 [% END %]
@@ -303,7 +352,7 @@ router bgp 65000
  neighbor [% ip %] soft-reconfiguration inbound
  neighbor [% ip %] route-map AS[% neigh.as %]-OUTM out
 [% END %]
- neighbor [% ip %] route-map AS[% neigh.as %]-INM in
+ neighbor [% ip %] route-map [% neigh.ipv4m.mapname %] in
 [% IF neigh.ipv4m.maxpref %]
  neighbor [% ip %] maximum-prefix [% neigh.ipv4m.maxpref %] 85
 [% END %]
@@ -332,7 +381,7 @@ router bgp 65000
  neighbor [% ip %] soft-reconfiguration inbound
  neighbor [% ip %] route-map AS[% neigh.as %]-OUT6 out
 [% END %]
- neighbor [% ip %] route-map AS[% neigh.as %]-IN6 in
+ neighbor [% ip %] route-map [% neigh.ipv6.mapname %] in
 [% IF neigh.ipv6.maxpref %]
  neighbor [% ip %] maximum-prefix [% neigh.ipv6.maxpref %] 85
 [% END %]
@@ -358,7 +407,7 @@ router bgp 65000
  neighbor [% ip %] soft-reconfiguration inbound
  neighbor [% ip %] route-map AS[% neigh.as %]-OUT6M out
 [% END %]
- neighbor [% ip %] route-map AS[% neigh.as %]-IN6M in
+ neighbor [% ip %] route-map [% neigh.ipv6m.mapname %] in
 [% IF neigh.ipv6m.maxpref %]
  neighbor [% ip %] maximum-prefix [% neigh.ipv6m.maxpref %] 85
 [% END %]
@@ -370,4 +419,5 @@ router bgp 65000
 !
 
 end
-
+[%# USE Dumper(Indent=1) %]
+[%# Dumper.dump(conf) %]

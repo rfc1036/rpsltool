@@ -39,6 +39,8 @@ sub aggregate_networks {
 			if (my $aggregated = $prev->aggregate($cur)) {
 				$prev = $aggregated;
 				$changed = 1;
+			} elsif ($cur->overlaps($prev) == $IP_A_IN_B_OVERLAP) {
+				$changed = 1;
 			} else {
 				push(@new_addrs, $prev);
 				$prev = $cur;
@@ -49,11 +51,11 @@ sub aggregate_networks {
 	}
 }
 
-=head2 aggregate_networks
-
-# It assumes that all routes are normalized (have the host part set to 0).
+=head2 filter_networks
 
 =cut
+
+# It assumes that all routes are normalized (have the host part set to 0).
 
 sub filter_networks {
 	my ($routes, $filters, $reverse) = @_;

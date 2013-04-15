@@ -88,7 +88,7 @@ sub do_rpsl {
 			foreach my $r ($neigh->{unimport}, $neigh->{global_unimport},
 					$peers->{$ip}->{global_unimport}) {
 				next if not ($r and @$r);
-				@unimport = map { $whois->expand_route_set($_, $ipv6) } @$r;
+				@unimport = @{ ($whois->import($r, $ipv6))[0] };
 			}
 			@$routes = @{ filter_networks($routes, \@unimport, 1) }
 				if @unimport;
@@ -102,11 +102,10 @@ sub do_rpsl {
 			}
 			if (@$aspathlist) {
 				# replace each ASN32 with AS_TRANS unless requested
-				@$aspathlist =
-					map { s/^[Aa][Ss]\d+\.\d+$/AS23456/; $_ } @$aspathlist
-						unless $neigh->{asn32_supported};
-				$neigh->{import_as} =
-					[ map { s/^AS//; $_; } @{ uniq_list($aspathlist) } ];
+				my @aslist = map { s/^AS//; $_; } @$aspathlist;
+				@aslist = map { $_ > 65536 ? '23456' : $_ } @aslist
+					if not $neigh->{asn32_supported};
+				$neigh->{import_as} = uniq_list(\@aslist);
 				$neigh->{aslistnum} = $neigh->{aslist}
 					or die "No aslist attribute set for $ip $afi\n";
 			}
@@ -170,6 +169,7 @@ sub Template::create_vmethods {
 
 $context->define_vmethod('scalar', 'route2cisco' => \&route2cisco);
 $context->define_vmethod('scalar', 'route2acl'   => \&route2acl);
+$context->define_vmethod('scalar', 'route2stdacl' => \&route2stdacl);
 
 $context->define_vmethod('list', 'hostroutes' => sub {
     map {
@@ -189,7 +189,8 @@ sub route2cisco {
 		^([0-9\.:a-fA-F]+)		# prefix
 		/([0-9]+)				# length
 		(?:\^ ([0-9\+\-]+) )?	# optional range
-	$!ox;
+		$
+	!ox;
 
 	my $s;
 	if (not $prefix or not $len) {
@@ -218,10 +219,25 @@ sub route2acl {
 		^([0-9\.:a-fA-F]+)		# prefix
 		/([0-9]+)				# length
 		(?:\^ [0-9\+\-]+ )?		# ignored range
-	$!ox;
+		$
+	!ox;
 
 	$len = 32 if $len > 32 or $len < 0;
 	my $bits = '1' x $len . '0' x (32 - $len);
+	return $prefix . ' ' . join('.', unpack('CCCC', pack('B*', $bits)));
+}
+
+# same thing for network/wildcard pairs
+sub route2stdacl {
+	my ($prefix, $len) = $_[0] =~ m!
+		^([0-9\.:a-fA-F]+)		# prefix
+		/([0-9]+)				# length
+		(?:\^ [0-9\+\-]+ )?		# ignored range
+		$
+	!ox;
+
+	$len = 32 if $len > 32 or $len < 0;
+	my $bits = '0' x $len . '1' x (32 - $len);
 	return $prefix . ' ' . join('.', unpack('CCCC', pack('B*', $bits)));
 }
 
