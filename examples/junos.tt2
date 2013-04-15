@@ -1,0 +1,162 @@
+[% # This code determines the names of the route-maps and ACLs
+  FOREACH ip = conf.keys.sort;
+    FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ];
+      NEXT IF NOT conf.$ip.$afi;
+      neigh = conf.$ip;
+
+      # Here you can modify the policy name to support applying
+      # different policies to different neighbor IPs of the same AS (e.g.
+      # at different IXes).
+      IF ip.match('^92\.60\.70\.') OR ip.match('(?i)^2a01:658:ffff:');
+        policyixname = '-MINAP';
+      ELSIF ip.match('^195\.69\.14[4567]\.') OR ip.match('(?i)^2001:7F8:1:');
+        policyixname = '-AMSIX';
+      ELSE;
+        policyixname = '';
+      END;
+      aspathixname = '';
+
+      IF    afi == 'ipv4';  aspathafi = '';
+      ELSIF afi == 'ipv6';  aspathafi = '-v6';
+      ELSIF afi == 'ipv4m'; aspathafi = '-M';
+      ELSIF afi == 'ipv6m'; aspathafi = '-v6M';
+      ELSE;
+        THROW "Unknown AFI $afi";
+      END;
+
+      IF NOT neigh.$afi.aspathname;
+        neigh.$afi.aspathname =
+          'PATH-FROM' _ aspathixname _ aspathafi _ '-AS' _ neigh.as;
+      END;
+      IF NOT neigh.$afi.policyname;
+        neigh.$afi.policyname =
+          'FROM'      _ policyixname _ aspathafi _ '-AS' _ neigh.as;
+      END;
+
+    END;
+  END;
+
+  MACRO afi2family(afi) BLOCK;
+  SWITCH afi;
+  CASE [ 'ipv4', 'ipv4m' ];
+    'inet';
+  CASE [ 'ipv6', 'ipv6m' ];
+    'inet6';
+  CASE DEFAULT;
+    THROW "Unknown AFI $afi";
+  END;
+  END;
+%]
+
+[%# ####################################################################### %]
+protocols {
+    bgp {
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% NEXT IF NOT neigh.$afi %]
+[% IF neigh.peergroup %]
+        group [% neigh.peergroup %] {
+            replace:
+            neighbor [% ip %] {
+                description "[% neigh.description %]";
+[% IF    neigh.$afi.in_policy; policy = neigh.$afi.in_policy;
+   ELSIF neigh.customer;       policy = var.$afi.customers.in_policy;
+   ELSE;                       policy = var.$afi.peers.in_policy;
+   END;
+   THROW "No policy defined for $ip" IF NOT policy;
+%]
+[% # you can also modify the policy of a specific neighbor:
+  IF ip == '193.201.28.10'; policy = policy _ " RAISE-METRIC"; END;
+%]
+[% 
+  IF afi == 'ipv6' AND NOT neigh.$afi.import_routes; policy = "BGP-INCOMINGv6 " _ policy; END;
+%]
+                import [ [% policy %] [% neigh.$afi.policyname %] ];
+                peer-as [% neigh.as %];
+[% FOREACH cmd = neigh.bgp_commands.merge(neigh.$afi.bgp_commands) %]
+                [% cmd %];
+[% END %]
+[% IF neigh.$afi.maxpref %]
+                family [% afi2family(afi) %] {
+                    any {
+                        prefix-limit {
+                            maximum [% neigh.$afi.maxpref %];
+                            teardown 85 idle-timeout 120;
+                        }
+                    }
+                }
+[% END %]
+            }
+        }
+[% ELSE %]
+        [% THROW 'support for peers not in a peer group is not implemented' %]
+[% END %]
+
+[% END %]
+[% END %]
+    }
+}
+
+[%# ####################################################################### %]
+policy-options {
+[%# http://www.juniper.net/techpubs/software/junos/junos94/swconfig-policy/defining-as-path-regular-expressions.html
+%]
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% NEXT IF neigh.is_backup %]
+[% NEXT IF seen.pl.${neigh.$afi.aspathname};
+   seen.pl.${neigh.$afi.aspathname} = 1;
+%]
+[% NEXT IF NOT neigh.$afi.import_as %]
+    replace:
+[% aslist = neigh.$afi.import_as.nsort %]
+    as-path [% neigh.$afi.aspathname %] "([% aslist.join('|') %])+";
+
+[% END %]
+[% END %]
+[%# http://www.juniper.net/techpubs/software/junos/junos94/swconfig-policy/defining-route-lists.html
+%]
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% NEXT IF neigh.is_backup %]
+[% NEXT IF seen.pl.${neigh.$afi.policyname};
+   seen.pl.${neigh.$afi.policyname} = 1;
+%]
+    replace:
+    policy-statement [% neigh.$afi.policyname %] {
+[% IF neigh.$afi.import_routes OR neigh.$afi.import_as %]
+        from {
+[% IF neigh.$afi.import_as %]
+            as-path [% neigh.$afi.aspathname %];
+[% END %]
+[% FOREACH route = neigh.$afi.import_routes.ipsort %]
+            route-filter [% route.route2junos %];
+[% END %]
+        }
+[% END %]
+        then {
+[% IF    neigh.$afi.in_community; c = neigh.$afi.in_community;
+   ELSIF neigh.customer;          c = var.$afi.customers.in_community;
+   ELSE;                          c = var.$afi.peers.in_community;
+   END;
+%]
+[% FOREACH community = c.split(';?\s+') %]
+            community add [% community %];
+[% END %]
+[% IF neigh.$afi.localpref %]
+            local-preference [% neigh.$afi.localpref %];
+[% END %]
+[% IF neigh.$afi.metric %]
+            metric [% neigh.$afi.metric %];
+[% END %]
+            accept;
+        }
+    }
+[% END %]
+
+[% END %]
+}
+

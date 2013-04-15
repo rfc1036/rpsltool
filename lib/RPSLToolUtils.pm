@@ -17,11 +17,11 @@ use constant FIELDS_AFI_ARRAY => qw(
 	import unimport global_unimport bgp_commands
 );
 use constant FIELDS_FROM_NEIGH => qw(
-	import unimport default_aspath_filter
-	maxpref peergroup localpref metric asn32_supported
+	import unimport localpref maxpref metric peergroup
+	asn32_supported default_aspath_filter in_community in_policy
 );
 use constant FIELDS_FROM_GLOBALS => qw(
-	default_aspath_filter asn32_supported
+	asn32_supported default_aspath_filter in_community in_policy
 );
 
 
