@@ -1,0 +1,50 @@
+From: Marco d'Itri <md@linux.it>
+To: [% peeremail +%]
+[% IF param.bcc %]
+Bcc: [% param.bcc +%]
+[% END %]
+Subject: networks announced by AS[% as +%]
+User-Agent: nagpeer/1.0
+
+(This is a standard text, generated semi-automatically.)
+
+After a periodical revision of our BGP filters, we determined some
+inconsistencies between the set of networks announced by your
+autonomous system AS[% as %] and those registered in the RIPE
+database with the expansion of your as-set object [% top_object %].
+
+Specifically:
+[% IF asn.size %]
+
+* the following autonomous systems of customers of yours are not listed
+  in the as-set:
+
+[% FOREACH a = asn.asnsort %]
+[% a +%]
+[% END %]
+
+If an as-set object does not list all the autonomous systems actually
+announced then peers will not be able to automatically generate their
+BGP filters.
+[% END %]
+[% IF routes.size %]
+
+* there are no route objects for the following networks:
+
+[% FOREACH r = routes.ipsort %]
+[% r %][% IF paths.$r %] ([% paths.$r %])[% END +%]
+[% END %]
+
+The purpose of route objects is to document which autonomous system is
+authorized to announce a network. Registering them allows your peers to
+automatically generate their BGP filters, allowing timely updates
+without the need for manual changes.
+[% END %]
+
+
+Please let me know if you have any questions, and thank you for your
+help.
+
+-- 
+ciao,
+Marco

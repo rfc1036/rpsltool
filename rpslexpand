@@ -1,0 +1,72 @@
+#!/usr/bin/perl
+#
+# Copyright 2006 by Marco d'Itri <md@linux.it>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+use warnings;
+use strict;
+
+use YAML qw(Load LoadFile);
+use Getopt::Long;
+use FindBin;
+
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolWhois;
+
+##############################################################################
+my $ipv6 = 0;
+my ($whois_server, $whois_source);
+
+GetOptions(
+	'ipv6'				=> \$ipv6,
+	'whois-server=s'	=> \$whois_server,
+	'whois-source=s'	=> \$whois_source,
+);
+
+usage(1) if not @ARGV;
+
+my @import = @ARGV;
+
+##############################################################################
+my ($param) = Load(join('', <DATA>));
+die if not $param;
+
+make_boolean($param, qw(whois_show_cache_misses
+	whois_die_on_error whois_warn_on_error whois_warn_on_recursive_error));
+$param->{whois_server} = $whois_server if $whois_server;
+$param->{whois_source} = $whois_source if $whois_source;
+
+my $whois = whois_factory($param);
+
+my ($routes, $asn) = $whois->import(\@import, $ipv6, 0);
+
+print join("\n", @$routes) . "\n" if @$routes;
+print join("\n", @$asn)    . "\n" if @$asn;
+
+exit;
+
+##############################################################################
+sub usage {
+	print STDERR <<END;
+Usage: rpslexpand [OPTIONS]... [AS-SET|RS-SET]...
+  --ipv6               ask for route6 records instead of route records
+  --whois-server=HOST  connect to HOST instead of the default
+  --whois-source=NAME  ask for records with a specific source attribute
+END
+	exit(shift);
+}
+
+__DATA__
+whois_server: whois.ripe.net
+cache_root: /tmp/rpsltool
+
+#whois_show_cache_misses: y
+
+#whois_warn_on_error: y
+#whois_warn_on_recursive_error: y
+

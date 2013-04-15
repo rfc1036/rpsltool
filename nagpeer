@@ -1,0 +1,274 @@
+#!/usr/bin/perl
+#
+# Copyright 2006 by Marco d'Itri <md@linux.it>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+use warnings;
+use strict;
+
+use YAML qw(Load LoadFile);
+use Template;
+use File::Temp;
+use FindBin;
+
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolNet;
+use RPSLToolWhois;
+use RPSLToolTemplate;
+
+my $v6route = qr/[:0-9a-fA-F\/^\-\+]+/;
+my $v4route = qr/[\.0-9\/^\-\+]+/;
+my $route_set = qr/(?:[Aa][Ss][0-9]+:)?[Rr][Ss]-[:A-Za-z0-9_\-]+/;
+
+my %default_parameters = (
+	whois_server		=> 'whois.ripe.net',
+	cache_root			=> '/tmp/rpsltool',
+);
+
+##############################################################################
+my ($ip, $asn, $report_mode);
+
+if      (@ARGV != 2) {
+    usage(1);
+} elsif ($ARGV[1] eq 'report') {
+	$report_mode = 1;
+} elsif ($ARGV[1] =~ /^(?:as)?([0-9]{1,5})$/i) {
+    $asn = $1;
+} elsif ($ARGV[1] =~ /^[a-f:0-9\.]+$/i) {
+    $ip = $ARGV[1]
+} else {
+    usage(1);
+}
+
+##############################################################################
+my ($param) = LoadFile($ARGV[0]);
+die if not $param;
+
+my ($param2, undef, $peers_config) = LoadFile($param->{peersfile});
+die if not $param2;
+%$param = (%default_parameters, %$param2, %$param);
+
+make_boolean($param, qw(nomail ignore_custom_routes ignore_custom_asn
+	check_all_routes check_origin_only
+	whois_die_on_error whois_warn_on_error whois_warn_on_recursive_error));
+
+my $peers = process_peers_config($peers_config);
+
+my $whois = whois_factory($param);
+
+if ($report_mode) {
+	iterate_peers($peers, sub {
+		my ($peer, $afi) = @_;
+		return if not $peer->{import} or $peer->{is_backup};
+		compare_routes_received_irr($peer, $param, $whois, $afi);
+	});
+	parse_leaks($peers, $param);
+	create_web_page($peers, $param);
+	exit;
+}
+
+if ($asn) {
+	$ip = neigh_by_asn($peers, $asn);
+	die "No neighbor found for AS$asn\n" if not $ip;
+}
+
+my $peer = $peers->{$ip};
+die "Neighbour $ip does not exist\n" if not $peer;
+
+compare_routes_received_irr($peer, $param, $whois);
+create_notice($peer, $param);
+
+exit;
+
+##############################################################################
+sub compare_routes_received_irr {
+	my ($peer, $param, $whois, $afi) = @_;
+
+	$afi = ($peer->{ip} =~ /:/ ? 6 : 0) ? 'ipv6' : 'ipv4' if not $afi;
+
+	my $top_object = $peer->{$afi}->{import}->[0];
+	my $report_routes = 1;
+	$report_routes = 0
+		if not $param->{check_all_routes} and $top_object =~ /^</;
+
+	# If we want a full report for peers which are currently being filtered
+	# by as-path then we need to strip < > from the objects list.
+	my @import0;
+	if ($report_routes) {
+		@import0 = map { s/^<(.+)>$/$1/g; $_ } @{$peer->{$afi}->{import}};
+	} else {
+		@import0 = @{$peer->{$afi}->{import}};
+	}
+
+	# If requested, remove the routes and ASN which may have been added in
+	# the configuration file to support peers with incomplete objects.
+	# This is basically an hack needed because we do not know the "official"
+	# as-set or explicit list of ASN to import.
+	my @import;
+	foreach (@import0) {
+		next if $param->{ignore_custom_routes}
+				and /^(?:$v6route|$v4route)$/o;
+		next if $param->{ignore_custom_asn}
+				and /^<?AS[0-9]+>?$/i and $top_object !~ /^<?AS[0-9]/;
+		push(@import, $_);
+	}
+	$peer->{$afi}->{test_import} = \@import;
+
+	# RPSL-expand to routes and ASN the list of as-set and ASN from
+	# the configuration.
+	my $ipv6 = $afi =~ /^ipv6/ ? 1 : 0;
+	my ($routes_irr, $asn_irr) = $whois->import(\@import, $ipv6, 1);
+
+	# Read the list of routes actually received and their as-paths.
+	my $routes_received = [ ];
+	my $paths_received = { };
+	read_routes("$param->{routesdir}/$peer->{as}_$peer->{ip}_${afi}_rr",
+		$routes_received, $paths_received);
+	$peer->{$afi}->{paths} = $paths_received;
+
+	my $diff = filter_networks($routes_received, $routes_irr, 1);
+
+	my $asn_received;
+	if ($param->{check_origin_only}) {
+		$asn_received = origin2asn($paths_received);
+	} else {
+		$asn_received = paths2asn($paths_received);
+	}
+
+	my @asn;
+	if ($top_object !~ /$route_set/o) {
+		my %asn_irr = map { $_ => undef } @$asn_irr;
+		foreach my $as (map { "AS$_" } @$asn_received) {
+			push(@asn, $as) if not exists $asn_irr{$as};
+		}
+		$peer->{$afi}->{missing}->{asn} = \@asn;
+	}
+	if ($report_routes) {
+		my @routes;
+		my %asn_missing = map { $_ => undef } @asn;
+		foreach my $route (@$diff) {
+			my $origin = $paths_received->{$route}; $origin =~ s/^.*\s+/AS/;
+			push(@routes, $route) if not exists $asn_missing{$origin};
+		}
+		$peer->{$afi}->{missing}->{routes} = \@routes;
+	}
+}
+
+##############################################################################
+sub create_web_page {
+	my ($peers, $param) = @_;
+
+	die "missing template" if not $param->{webtemplate};
+
+	my $vars = {
+		peers		=> $peers,
+		param		=> $param,
+	};
+
+	$Template::Config::STASH = 'Template::Stash::XS';
+	my $template = Template->new({
+		POST_CHOMP	=> 1,
+		DEBUG_UNDEF	=> 1,
+	}) or early_error("Template->new: $Template::ERROR");
+
+	$template->create_net_vmethods;
+
+	die "missing template" if not $param->{webtemplate};
+
+	my $output;
+	$template->process($param->{webtemplate}, $vars, \$output)
+		or die $template->error;
+
+	print $output;
+}
+
+##############################################################################
+sub parse_leaks {
+	my ($peers, $param) = @_;
+
+	iterate_peers($peers, sub {
+		my ($peer, $afi) = @_;
+		return unless $peer->{ip} and $param->{leaks}->{$peer->{ip}};
+
+		$peer->{$afi}->{leak} =
+			{ map { $_ => 1 } @{$param->{leaks}->{$peer->{ip}}} };
+	});
+}
+
+##############################################################################
+sub create_notice {
+	my ($peer, $param, $afi) = @_;
+
+	$afi = ($peer->{ip} =~ /:/ ? 6 : 0) ? 'ipv6' : 'ipv4' if not $afi;
+
+	my $vars = $peer->{$afi}->{missing};
+	return if not ($vars->{routes} and @{$vars->{routes}})
+		and not ($vars->{asn} and @{$vars->{asn}});
+
+	%$vars = (
+		%$vars,
+		as			=> $peer->{as},
+		ip			=> $peer->{ip},
+		paths		=> $peer->{$afi}->{paths},
+		param		=> $param,
+	);
+
+	$vars->{peeremail} = $param->{contacts}->{$peer->{as}}
+		if $param->{contacts}->{$peer->{as}};
+
+	$vars->{top_object} = $peer->{$afi}->{import}->[0];
+	$vars->{top_object} =~ s/^<(.+)>$/$1/g;
+
+	$Template::Config::STASH = 'Template::Stash::XS';
+	my $template = Template->new({
+		POST_CHOMP	=> 1,
+		DEBUG_UNDEF	=> 1,
+	}) or early_error("Template->new: $Template::ERROR");
+
+	$template->create_net_vmethods;
+
+	my %intl = map { $_ => undef } @{$param->{international}};
+
+	my $input = exists $intl{$peer->{as}}
+		? $param->{itemplate} : $param->{template};
+	die "missing template" if not $input;
+
+	my $output;
+	$template->process($input, $vars, \$output) or die $template->error;
+
+	if ($param->{nomail}) {
+		print $output;
+	} else {
+		mail_text_interactive($param->{mailcmd}, $output);
+	}
+}
+
+sub mail_text_interactive {
+	my ($mailcmd, $text) = @_;
+
+	my $fh = new File::Temp;
+	my $filename = $fh->filename;
+
+	print $fh $text;
+
+	my $cmd = sprintf($mailcmd, $filename);
+	system $cmd and die "system: $?";
+
+	close $fh;
+}
+
+##############################################################################
+sub usage {
+	print STDERR <<END;
+Usage: nagpeer nagpeer.yml ASN
+       nagpeer nagpeer.yml IP
+       nagpeer nagpeer.yml report
+END
+	exit(shift);
+}
+

@@ -1,22 +1,67 @@
-#!/usr/bin/perl -w
-
-use YAML;
-use Net::IP;
+use warnings;
 use strict;
 
-my ($routes, $filter) = YAML::Load(join("\n", <DATA>));
+use Net::IP;
 
-$routes = rpsl_filter($routes, $filter);
-print join("\n", @$routes) . "\n";
+=head2 sort_networks
+
+This function sorts in place a list of prefixes represented by Net::IP
+objects.
+
+=cut
+
+sub sort_networks {
+	my $addrs = $_[0];
+
+	@$addrs = sort {
+		$a->bincomp('lt', $b) ? -1 : ($a->bincomp('gt', $b) ? 1 : 0);
+	} @$addrs;
+}
+
+=head2 aggregate_networks
+
+This function aggregates in place a B<sorted> list of prefixes represented
+by Net::IP objects.
+
+=cut
+
+sub aggregate_networks {
+	my $addrs = $_[0];
+	return if not @$addrs;
+
+	# continue aggregating until there are no more changes to do
+	my $changed = 1;
+	while ($changed) {
+		$changed = 0;
+		my @new_addrs;
+		my $prev = $addrs->[0];
+		foreach my $cur (@$addrs[1 .. $#{$addrs}]) {
+			if (my $aggregated = $prev->aggregate($cur)) {
+				$prev = $aggregated;
+				$changed = 1;
+			} else {
+				push(@new_addrs, $prev);
+				$prev = $cur;
+			}
+		}
+		push(@new_addrs, $prev);
+		@$addrs = @new_addrs;
+	}
+}
+
+=head2 aggregate_networks
 
 # It assumes that all routes are normalized (have the host part set to 0).
-sub rpsl_filter {
+
+=cut
+
+sub filter_networks {
 	my ($routes, $filters, $reverse) = @_;
 
 	return [ @$routes ] if not @$filters;
 
 	# cache the objects representing the parsed filters
-	my @filters_obj = map {
+	my @filter_objects = map {
 		my ($froute, $flen, $frange) =
 			$_ =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
 		die "invalid filter '$_'\n" if not defined $froute;
@@ -32,7 +77,7 @@ sub rpsl_filter {
 	foreach my $rroute (@$routes) {
 		my $route = new Net::IP($rroute) or die Net::IP::Error() . "\n";
 		my $match;
-		foreach (@filters_obj) {
+		foreach (@filter_objects) {
 			my $rf = $route->rpsl_filter($_);
 			die Net::IP::Error() . "\n" if not defined $rf;
 			if ($rf) { $match = 1; last };
@@ -41,6 +86,12 @@ sub rpsl_filter {
 	}
 	return \@ok;
 }
+
+##############################################################################
+package Net::IP;
+
+use warnings;
+use strict;
 
 =head2 rpsl_filter
 
@@ -51,9 +102,29 @@ and B<flen> members.
 
 C<@list = $ip-E<gt>rpsl_filter($filter));>
 
+=over
+
+=item *
+
+^+: inclusive more specifics
+
+=item *
+
+^-: exclusive more specifics
+
+=item *
+
+^n: length n more specifics
+
+=item *
+
+^n-m: length n-m more specifics
+
+=back
+
 =cut
 
-sub Net::IP::rpsl_filter {
+sub rpsl_filter {
 	my ($self, $f) = @_;
 
 	my ($froute, $flen, $frange, $filter);
@@ -66,14 +137,22 @@ sub Net::IP::rpsl_filter {
 		($froute, $flen, $frange) =
 			$f =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
 		if (not defined $froute) {
-			$Net::IP::ERROR = "invalid filter '$f'";
+			$self->{error} = $ERROR = "Invalid filter $f\n";
+			$self->{errno} = $ERRNO = 107;
 			return undef;
 		}
-		my $filter = new Net::IP("$froute");
-		return undef if not defined $filter;
+		my $filter = new Net::IP("$froute") or return undef;
 	}
 
-	return 0 if $self->version != $filter->version;
+	# silently ignore filters for a different AFI
+	return 0 if $self->{ipversion} ne $filter->{ipversion};
+
+	# since the overlaps method is very slow we first check for the easy
+	# (and common) case
+	if (not $frange) {
+		return 0 if $self->{ip} ne $filter->{ip} or
+					$self->{prefixlen} ne $filter->{prefixlen};
+	}
 
 	my $overlap = $self->overlaps($filter); # A: route, B: filter
 	return undef if not defined $overlap;
@@ -87,24 +166,14 @@ sub Net::IP::rpsl_filter {
 	elsif ($frange eq '-')				{ $lmin = $flen+1; $lmax = 128; }
 	elsif ($frange =~ /^\d+$/)			{ $lmin =          $lmax = $frange; }
 	elsif ($frange =~ /^(\d+)-(\d+)$/)	{ $lmin = $1;      $lmax = $2; }
-	else { $Net::IP::ERROR =  "invalid filter '$filter'"; return undef; }
+	else {
+		$self->{error} = $ERROR = "invalid filter '$filter'";
+		return undef;
+	}
 
 	# $IP_IDENTICAL, $IP_A_IN_B_OVERLAP
-	my $rlen = $self->prefixlen;
-	return 1 if $rlen >= $lmin and $rlen <= $lmax;
+	return 1 if $self->{prefixlen} >= $lmin and $self->{prefixlen} <= $lmax;
 	return 0;
 }
 
-# ^+: inclusive more specifics
-# ^-: exclusive more specifics
-# ^n: length n more specifics
-# ^n-m: length n-m more specifics
-
-__DATA__
-- 1.0.0.0/23
-- 1.0.4.0/23
-- 1.0.4.0/24
-- 1.0.4.0/25
-- 2001:1418:13::/48
----
-- 1.0.4.0/24^+
+1;

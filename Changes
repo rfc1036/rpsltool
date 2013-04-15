@@ -1,4 +1,28 @@
+1.0
+Modularized and cleaned up the code.
+Added the routesdiff program (formerly part of my cisco-tools package),
+to show which routes are actually not being accepted from a peer.
+Added the testpeerfilter program, to test the effect of a filter on a
+peer without actually loading it on the router.
+Added the nagpeer program, to automatically generate reports of bugs in
+the RPSL objects published by a peer.
+Added the rpslexpand, to quickly perform RPSL expansion from the
+command line.
+Added the findextraobjs program, useful to identify obsolete entries in
+peers configuration files.
+Added documentation.
+Use FindBin, which allows installing the modules in any directory.
+Removed the aspath_acl_num parameter and the feature to automatically
+assign the numbers to the as-path lists, which was implemented badly
+and is probably not useful anyway without a persistent database.
+Removed the support for specifying a template name on the rpsltool
+command line after the configuration file name and for guessing the
+template name from the config file name.
+Added to rpsltool an explicit section with the default configuration
+parameters, added more configuration parameters.
+Added to the examples directory a proof of concept YAML schema file.
+Hugely optimized Net::IP::rpsl_filter for the common case.
+
 0.2
 Minor updates to the example filters.
 Added the print_routes example script.
-

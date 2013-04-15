@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+# test the filter_networks() function
+
+use warnings;
+use strict;
+
+use YAML;
+use FindBin;
+
+use lib "$FindBin::RealBin/../lib";
+use RPSLToolNet;
+
+# parse a YAML file composed of two YAML documents:
+# a list of prefixes and the list of filters to apply to it
+my ($routes, $filter) = YAML::Load(join("\n", <DATA>));
+
+$routes = filter_networks($routes, $filter);
+print join("\n", @$routes) . "\n";
+
+__DATA__
+- 1.0.0.0/23
+- 1.0.4.0/23
+- 1.0.4.0/24
+- 1.0.4.0/25
+- 2002:0100:0004::/48
+---
+- 1.0.4.0/24^+

@@ -1,0 +1,55 @@
+--- #YAML:1.0
+peersfile: ../mambo
+routesdir: ../routes/mambo.core.itgate.net
+
+# templates for mailing national and international peers and for the web page
+template: nagpeer.mail.tt2
+itemplate: nagpeer.imail.tt2
+webtemplate: nagpeer.web.tt2
+
+# do not report at all missing ASNs or routes
+whois_warn_on_error: n
+whois_warn_on_recursive_error: n
+
+# ignore the routes or ASN added locally
+# this way the announced routes will be compared to the "official" macro
+ignore_custom_routes: y
+ignore_custom_asn: y
+
+# report missing routes even if the peer is prefix-filtered
+# missing routes are always reported for prefix-filtered peers
+#check_all_routes: y
+
+# ignore missing ASNs if they are transit-only
+#check_origin_only: y
+
+# international peers use the "international" template
+# RIPE AS-SWCMGLOBAL AS-EASYNET AS-GLOBAL AS-EQUANT-SOUTHEUR AS-COLT AS-RDSNET AS-INTEROUTE AS-SPXS
+international: [ 12654, 3303, 4589, 6730, 6853, 8220, 8708, 8928, 12399 ]
+
+# replace the recipient with this value, for debugging
+#forced_recipient: md@linux.it
+
+# add a Bcc header
+#bcc: md@linux.it
+
+# MTA used to edit the composed message. %s is the file name, with headers
+mailcmd: mutt -e 'unset signature' -H %s
+
+# print the message to stdout instead of using mailcmd
+#nomail: y
+
+##############################################################################
+# default email addresses to use when mailing peers
+contacts:
+ 65501: noc@example.net
+ 65502: noc@example.com, staff@example.com
+
+# Lists of ASN and prefixes which are known to be leaks and will be
+# specially marked in the HTML report.
+leaks:
+ 217.29.66.4:  [ AS12498, AS3313, 193.108.186.0/24, 193.193.183.0/24 ]
+ 217.29.66.29: [ AS15589, 212.90.0.0/19, AS8968, 213.183.151.0/24 ]
+ 217.29.66.68: [ AS174, AS286, AS2856, AS3215, AS3549, AS3257, AS8881, AS12641, AS12876 ]
+ 217.29.66.69: [ AS174, AS286, AS1239, AS2914, AS5511,   AS6395, AS16422,   AS6461, AS20562,  AS8220, AS20734,  AS6666,  AS11840, AS26134, AS10913 ]
+

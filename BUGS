@@ -1,5 +1,8 @@
 If the expansion of the arguments of an import attribute is empty then
 everything is accepted.
 
-A lot of documentation is needed.
+If the whois server closes the connection without reporting an error
+Net::Whois::RIPE will not notice it and will return success.
+
+More documentation is needed.
 

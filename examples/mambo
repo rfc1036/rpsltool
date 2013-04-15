@@ -2,11 +2,8 @@
 # vim: syntax=yaml shiftwidth=2 expandtab autoindent
 --- #YAML:1.0
 # Misc parameters.
-aspath_acl_num: 100
-#template: cisco-prefix.tt2
 template: cisco-full.tt2
 cache_root: /home/md/rpsltool
-cache_depth: 0
 
 ---
 akamai: 65000:65198
@@ -41,7 +38,7 @@ ipv6:
 - as: 8674
   description: I-ROOT
   ip: 217.29.66.57
-  ipbackup: 217.29.67.57
+  backupip: 217.29.67.57
   import: AS-NETNOD-ANYCAST
 
 - as: 12654

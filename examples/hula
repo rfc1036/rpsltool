@@ -4,10 +4,8 @@
 # See http://www.yaml.org/refcard.html for help on the YAML syntax.
 --- #YAML:1.0
 # Misc parameters.
-aspath_acl_num: 100
 template: cisco-full.tt2
-cache_root: /home/md/projects/rpslng/rpsltool
-cache_depth: 0
+cache_root: /home/md/rpsltool
 
 ---
 # These variables are referenced in the generic configuration template.
@@ -21,9 +19,7 @@ ipv4:
     localpref: 350
     community: 65000:65000
   peers:
-    #localpref: 250
     localpref: 300
-    #community: 65000:65002
     community: 65000:65011
 ipv6:
   customers:
@@ -46,26 +42,26 @@ ipv6:
   customer: y
   peergroup: CUSTOMER
   # Create an as-path filter for all aut-nums and as-sets imported for
-  # the purpose of creating prefix-filters. Probably not useful.
+  # the purpose of creating prefix-filters.
   #default_aspath_filter: y
 
 - as: 20912
   description: Panservice
   ip: 2001:1418:1:400::22
   import: AS20912
-  bgp_commands: 'password 7 00091701054F0E'
+  bgp_commands: 'password 7 00000000000000'
 
 - as: 12637
   description: Seeweb
   ip: 2001:1418:1:400::2E
   import: AS12637
-  ipv6: { bgp_commands: override-capability-neg }
+  ipv6: { bgp_commands: override-capability-neg, aslist: 31 }
 
 - as: 34695
   description: E4A
   ip: 2001:1418:1:400::3A
   import: AS34695
-  ipv6: { bgp_commands: override-capability-neg }
+  ipv6: { bgp_commands: override-capability-neg, aslist: 32 }
 
 # customers with a partial view
 # the peer-group contains default-originate

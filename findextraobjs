@@ -1,0 +1,98 @@
+#!/usr/bin/perl
+#
+# Copyright 2006 by Marco d'Itri <md@linux.it>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+use warnings;
+use strict;
+
+use YAML qw(Load LoadFile);
+use FindBin;
+
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolWhois;
+
+my $v6route = qr/[:0-9a-fA-F\/^\-\+]+/;
+my $v4route = qr/[\.0-9\/^\-\+]+/;
+
+my %default_parameters = (
+	whois_server		=> 'whois.ripe.net',
+	cache_root			=> '/tmp/rpsltool',
+);
+
+##############################################################################
+die "Usage: findextraobjs CONFIG-FILE [ROUTES-DIR]\n" if not $ARGV[0];
+
+my ($param, undef, $peers_config) = LoadFile($ARGV[0]);
+die if not defined $param;
+%$param = (%default_parameters, %$param);
+
+my $Routes_Dir = $ARGV[1];
+
+my $peers = process_peers_config($peers_config);
+
+my $whois = whois_factory($param);
+
+iterate_peers($peers, sub {
+	my ($peer, $afi) = @_;
+	return if not $peer->{import} or $peer->{is_backup};
+	check_for_dupes($peer, $param, $whois, $afi);
+});
+
+exit;
+
+##############################################################################
+sub check_for_dupes {
+	my ($peer, $param, $whois, $afi) = @_;
+
+	$afi = ($peer->{ip} =~ /:/ ? 6 : 0) ? 'ipv6' : 'ipv4' if not $afi;
+
+	# if the first object listed in the import field is not an as-set then
+	# the ASNs listed there will be considered the "official" objects
+	my $has_set = $peer->{$afi}->{import}->[0] =~ /^<?AS-/ ? 1 : 0;
+
+	my (@import, @import_extra_asn, @import_extra_routes);
+	foreach (@{$peer->{$afi}->{import}}) {
+		if ($has_set and /^<?AS[0-9]/) {
+			push(@import_extra_asn, $_);
+		} elsif (/^(?:$v6route|$v4route)$/o) {
+			push(@import_extra_routes, $_);
+		} else {
+			push(@import, $_);
+		}
+	}
+
+	return if not @import or not (@import_extra_asn or @import_extra_routes);
+
+	my $ipv6 = $afi =~ /^ipv6/ ? 1 : 0;
+	my ($irr_routes, $irr_asn) =
+		$whois->import(\@import, $ipv6, $peer->{default_aspath_filter});
+	my ($extra_routes, $extra_asn) =
+		$whois->import(\@import_extra_asn,$ipv6,$peer->{default_aspath_filter});
+	push(@$extra_routes, @import_extra_routes);
+
+	my $d;
+	$d = common($irr_routes, $extra_routes);
+	print "$peer->{as}:\t@$d\n" if @$d;
+	$d = common($irr_asn, $extra_asn);
+	print "$peer->{as}:\t@$d\n" if @$d;
+
+	my $rfile = "$Routes_Dir/$peer->{as}_$peer->{ip}_${afi}_rr";
+	return if not -e $rfile;
+
+	my $received_paths  = { };
+	my $received_routes = [ ];
+	read_routes($rfile, $received_routes, $received_paths);
+	my $received_asn = [ map { "AS$_" } @{ paths2asn($received_paths) } ];
+
+	$d = difference($extra_routes, $received_routes);
+	print "!$peer->{as}:\t@$d\n" if @$d;
+	$d = difference($extra_asn, $received_asn);
+	print "!$peer->{as}:\t@$d\n" if @$d;
+}
+

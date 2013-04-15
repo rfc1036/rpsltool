@@ -1,0 +1,20 @@
+--- Net-Whois-RIPE-1.23.orig/lib/Net/Whois/RIPE/Object.pm	2006-03-14 03:37:45.000000000 +0100
++++ Net-Whois-RIPE-1.23/lib/Net/Whois/RIPE/Object.pm	2006-03-14 13:34:16.000000000 +0100
+@@ -91,7 +91,7 @@ sub parse {
+             $value2 =~ s/#.*$// unless exists $Free_Form{$precedent_attribute};
+             $value2 =~ s/\s+$//;
+             $self->add($precedent_attribute, $value2);
+-        } elsif (my ($attribute, $value) = /^([\w\-]+|\*\w\w):\s+(.*)$/) {
++        } elsif (my ($attribute, $value) = /^([\w\-]+|\*\w\w):\s*(.*)$/) {
+             # strip end of line comments and trailing white space
+             $value =~ s/#.*$// unless exists $Free_Form{$attribute};
+             $value =~ s/\s+$//;
+@@ -132,7 +132,7 @@ sub size {    # will only work in the as
+ sub add {
+     my ( $self, $attr, $value ) = @_;
+ 
+-    unless ( ref($self) and $attr and $value ) {
++    unless ( ref($self) and $attr and defined $value ) {
+         carp "add: expecting an ATTRIBUTE and a VALUE" if $self->debug;
+         return undef;
+     }

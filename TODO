@@ -1,5 +1,24 @@
+rpsltool
+~~~~~~~~
 Add support for the -s query flag, to get records from the RADB database
-mirrored on the RIPE server. The syntax will be "SOURCE:OBJECT".
+mirrored on the RIPE server. The syntax will be "SOURCE#OBJECT" (or not?).
 
 What else would you like to see implemented?
+
+
+testpeerfilter
+~~~~~~~~~~~~~~
+Remove the embedded configuration section.
+
+
+findextraobjs
+~~~~~~~~~~~~~
+Implement less cryptic output.
+
+
+general
+~~~~~~~
+Support for multicast AFIs has not been tested with most programs.
+
+I do not like the aggregate() function and the pseudo-method using it.
 

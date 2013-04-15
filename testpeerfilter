@@ -1,0 +1,114 @@
+#!/usr/bin/perl
+#
+# Copyright 2006 by Marco d'Itri <md@linux.it>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+use warnings;
+use strict;
+
+use YAML qw(Load LoadFile);
+use FindBin;
+
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolWhois;
+use RPSLToolNet;
+
+my $v6route = qr/[:0-9a-fA-F\/^\-\+]+/;
+my $v4route = qr/[\.0-9\/^\-\+]+/;
+
+##############################################################################
+my ($ip, $asn);
+
+if (@ARGV != 1) {
+	usage(1);
+} elsif ($ARGV[0] =~ /^(?:as)?([0-9]{1,5})$/i) {
+	$asn = $1;
+} elsif ($ARGV[0] =~ /^[a-f:0-9\.]+$/i) {
+	$ip = $ARGV[0]
+} else {
+	usage(1);
+}
+
+##############################################################################
+my ($param) = Load(join('', <DATA>));
+die if not $param;
+
+my ($param2, undef, $peers_config) = LoadFile($param->{peersfile});
+die if not $param2;
+%$param = (%$param2, %$param);
+
+make_boolean($param, qw(ignore_custom_routes ignore_custom_asn
+	whois_die_on_error whois_warn_on_error whois_warn_on_recursive_error));
+
+my $peers = process_peers_config($peers_config);
+
+if ($asn) {
+	$ip = neigh_by_asn($peers, $asn);
+	die "No neighbor found for AS$asn\n" if not $ip;
+}
+
+my $peer = $peers->{$ip};
+die "Neighbour $ip does not exist\n" if not $peer;
+
+my $whois = whois_factory($param);
+
+my $diff = compare_routes_received_irr2($peer, $param, $whois, undef);
+print "Missing routes:\n" . join("\n", @$diff) . "\n";
+
+exit;
+
+##############################################################################
+sub usage {
+	print STDERR <<END;
+Usage: testpeerfilter ASN
+       testpeerfilter IP
+END
+	exit(shift);
+}
+
+##############################################################################
+sub compare_routes_received_irr2 {
+	my ($peer, $param, $whois, $afi) = @_;
+
+	$afi = ($peer->{ip} =~ /:/ ? 6 : 0) ? 'ipv6' : 'ipv4' if not $afi;
+
+	# import all routes even if the peer is configured to be filtered
+	# only by as-path
+	my @import0 = map { s/^<(.+)>$/$1/g; $_ } @{$peer->{$afi}->{import}};
+
+	my @import;
+	foreach (@import0) {
+		next if $param->{ignore_custom_routes} and /^(?:$v6route|$v4route)$/o;
+		next if $param->{ignore_custom_asn} and /^AS[0-9]+$/i;
+		push(@import, $_);
+	}
+
+	my $ipv6 = $afi =~ /^ipv6/ ? 1 : 0;
+	my ($irr_routes, undef) = $whois->import(\@import, $ipv6, 0);
+
+	my $routes_received = [ ];
+	read_routes("$param->{routesdir}/$peer->{as}_$peer->{ip}_${afi}_rr",
+		$routes_received);
+
+	my $diff = filter_networks($routes_received, $irr_routes, 1);
+	return $diff;
+}
+
+__DATA__
+peersfile: ../mambo
+routesdir: ../routes/mambo.core.itgate.net
+
+#whois_warn_on_error: y
+#whois_warn_on_recursive_error: y
+
+# ignore the routes or ASN added locally
+# this way the announced routes will be compared to the "official" data
+ignore_custom_routes: y
+#ignore_custom_asn: y
+
+whois_server: whois.ripe.net

@@ -1,0 +1,53 @@
+# This schema maybe can be used to validate with kwalify a rpsltool YAML
+# configuration file. It does not work very well, so far kwalify is
+# not expressive enough to represent some constraints which would be needed
+# and refuses to parse some fields accepted by YAML.pm.
+# Hopefully perl will have soon a native implementation of kwalify.
+# vim: syntax=yaml
+type:   seq
+sequence:
+ - type:   map
+   mapping:
+     disabled: { type: bool }
+     customer: { type: bool }
+     template: { type: bool }
+     akamai: { type: bool }
+     default_aspath_filter: { type: bool }
+     bgp_commands: { type: str }
+     ip:
+       type: str
+       pattern: /^[A-Za-z0-9\.:]+$/
+#       required: yes
+       unique: yes
+     backupip:
+       type: str
+       pattern: /^[A-Za-z0-9\.:]+$/
+       unique: yes
+     as:
+       type: int
+       range: { min: 1, max: 65535 }
+#       required: yes
+#       unique: yes
+     import:
+       type: any # XXX
+#       required: yes
+#       unique: yes
+     description: { type: str }
+     maxpref: { type: int }
+     peergroup: { type: str }
+     ipv4:
+       type: map
+       mapping:
+         aslist:
+           type: int
+           range: { min: 1, max: 500 }
+           unique: yes
+         bgp_commands: { type: str }
+     ipv6:
+       type: map
+       mapping:
+         aslist:
+           type: int
+           range: { min: 1, max: 500 }
+           unique: yes
+         bgp_commands: { type: str }

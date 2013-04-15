@@ -1,0 +1,133 @@
+#!/usr/bin/perl
+#
+# Copyright 2005, 2006 by Marco d'Itri <md@linux.it>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+use warnings;
+use strict;
+
+use FindBin;
+
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolNet;
+
+##############################################################################
+my $Routes_Dir = $ARGV[0] or usage(1);
+
+my $peers = list_peers($Routes_Dir);
+
+my $Ignore = read_commented_list();
+
+##############################################################################
+my %MaxPrefs;
+
+iterate_peers($peers, sub {
+	my ($peer, $afi) = @_;
+
+	# skip the backup sessions
+	my $uniquepeer = "$peer->{as} $afi";
+	return if exists $MaxPrefs{$uniquepeer};
+	$MaxPrefs{$uniquepeer} = undef;
+
+	read_all_routes($peer, $afi);
+
+	$MaxPrefs{$uniquepeer} = scalar @{$peer->{routes_accepted}};
+
+	report_accepted_routes($peer, $Ignore);
+});
+
+print "=" x 72 . "\n";
+print "ASN    routes\n";
+foreach my $as_afi (sort { $MaxPrefs{$b} <=> $MaxPrefs{$a} } keys %MaxPrefs) {
+	my ($asn, $afi) = $as_afi =~ /^(\S+) +(\S+)$/;
+	printf("%-7s%s%s\n", $asn, $MaxPrefs{$as_afi},
+		$afi ne 'ipv4' ? " ($afi)" : '');
+}
+
+exit 0;
+
+##############################################################################
+sub report_accepted_routes {
+	my ($peer, $ignore) = @_;
+
+	my $rr = $peer->{routes_received};
+	my $ra = $peer->{routes_accepted};
+
+	my $diff = difference($rr, $ra);
+	return if not @$diff;
+
+	if ($ignore) {
+		$diff = filter_networks($diff, $ignore, 1);
+		return if not @$diff;
+	}
+
+	print "=" x 72 . "\n";
+	print "Checking $peer->{ip} (AS$peer->{as}).\n";
+	printf("Accepted %d of %d routes (%.2f%%). Not accepted:\n",
+		scalar @$ra, scalar @$rr, scalar @$ra * 100 / scalar @$rr);
+
+	if (@$diff > 50) {
+		print "[Too many routes... List partially suppressed.]\n";
+		@$diff = @{$diff}[0,50];
+	}
+
+	my $paths = $peer->{paths};
+	printf("%-20s %s\n", $_, $paths->{$_}) foreach sort {
+			my @pa = split(/\s+/, $paths->{$a});
+			my @pb = split(/\s+/, $paths->{$b});
+			return $pa[$#pa] <=> $pb[$#pb] || $a cmp $b; # XXX use by_ip
+		} @$diff;
+	print "\n\n";
+}
+
+##############################################################################
+sub read_all_routes {
+	my ($peer, $afi) = @_;
+
+	$peer->{paths} = { };
+	$peer->{routes_received} = [ ];
+	$peer->{routes_accepted} = [ ];
+	read_routes("$Routes_Dir$peer->{as}_$peer->{ip}_${afi}_rr",
+		$peer->{routes_received}, $peer->{paths});
+	read_routes("$Routes_Dir$peer->{as}_$peer->{ip}_${afi}_ra",
+		$peer->{routes_accepted}, undef);
+}
+
+##############################################################################
+# XXX neighbors with multiple AFIs on the same IP address are not supported
+# by this function, hence multicast neighbors are ignored
+sub list_peers {
+	my ($dir) = @_;
+	return {
+		map { $_->[1] => { as => $_->[0], ip => $_->[1], $_->[2] => { } } }
+			map { s#.*/##; s#_rr$##; [ split(/_/, $_) ] }
+				glob($dir . '*_ipv?_rr')
+	};
+}
+
+sub by_routes {
+	scalar @{$b->{routes_accepted}} <=> scalar @{$a->{routes_accepted}}
+}
+
+sub usage {
+	print STDERR <<END;
+Usage: routesdiff ROUTES-DIR
+END
+	exit(shift);
+}
+
+__DATA__
+0.0.0.0/0^25-32
+# this is very rough and ignores all legitimate more specifics
+2000::/4^33-128
+3FFE::/18^25-128
+3FFE:4000::/18^33-128
+3FFE:8000::/17^29-128
+
+# 6to4
+2002::/16

@@ -1,458 +1,160 @@
 #!/usr/bin/perl
 #
-# Copyright 2005 by Marco d'Itri <md@linux.it>
+# Copyright 2005, 2006 by Marco d'Itri <md@linux.it>
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 2 as
-# published by the Free Software Foundation.
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 
-use Net::Whois::RIPE 1.22.1;
+use warnings;
+use strict;
+
 use YAML;
-use Cache::FileCache;
 use Net::IP;
 use Template;
 use Storable qw(dclone);
-use File::Basename;
+use FindBin;
 
-use strict;
-use warnings;
-
-# what to do if a whois query returns 101 ("no such object"), for direct
-# and recursive queries
-my $die_on_error = 0;
-my $warn_on_error = 1;
-my $warn_on_recursive_error = 0;
-
-my $v6route		= qr/[:\da-fA-F\/^\-\+]+/;
-my $v4route		= qr/[\.\d\/^\-\+]+/;
-my $aut_num		= qr/[Aa][Ss]\d+/;
-my $as_set		= qr/(?:[Aa][Ss]\d+:)?[Aa][Ss]-[:A-Za-z0-9_\-]+/;
-my $route_set	= qr/(?:[Aa][Ss]\d+:)?[Rr][Ss]-[:A-Za-z0-9_\-]+/;
-my $range		= qr/[\d\+\-]+/;
-
-# some debugging code to show when an object is not in cache
-#show_cache_misses() if -d '/home/md'; # XXX
+use lib "$FindBin::RealBin/lib";
+use RPSLToolUtils;
+use RPSLToolWhois;
+use RPSLToolNet;
+use RPSLToolTemplate;
 
 ##############################################################################
-die "Usage: $0 TEMPLATE-FILE\n" if not $ARGV[0];
+# These parameters can be set in YAML files.
 
-my ($param, $variables, $peers);
+my %default_parameters = (
+	whois_server		=> 'whois.ripe.net',
+	cache_root			=> '/tmp/rpsltool',
+	whois_die_on_error	=> 0,
+	whois_warn_on_error	=> 1,
+	whois_show_cache_misses	=> 1, # XXX TO BE DISABLED
+);
+
+##############################################################################
+usage(1) if not $ARGV[0];
+
 my $input = read_file($ARGV[0]);
 
+my ($param, $variables, $peers_config);
 if (is_yaml($input)) {
-	($param, $variables, $peers) = YAML::Load(join("\n", @$input));
+	($param, $variables, $peers_config) = Load(join("\n", @$input));
+	die if not defined $param;
+	%$param = (%default_parameters, %$param);
 
-	if (not $param->{template}) {
-		if (-f $ARGV[0] . '.tt2') {
-			$param->{template} = $ARGV[0] . '.tt2';
-		} else {
-			$param->{template} = dirname($ARGV[0]) . '/' . 'rpsltool.tt2';
-		}
-	} elsif ($param->{template} !~ m#/#) {
-		$param->{template} = dirname($ARGV[0]) . '/' . $param->{template};
-	}
-
-	$input = read_file($param->{template} || $ARGV[0]);
+	die "No template has been configured.\n" if not $param->{template};
+	$input = read_file($param->{template});
+} else {
+	$param = dclone(\%default_parameters);
 }
 
-my $whois = Net::Whois::RIPE->new($param->{whois_server} || 'whois.ripe.net');
-$whois->persistant;
-$whois->no_recursive;
-$whois->{FLAG_V} = '-Vrpsltool-1.0';
-$whois->debug(1) if $param->{whois_debug};
-$whois->source($param->{whois_source}) if $param->{whois_source};
+make_boolean($param, qw(whois_die_on_error whois_warn_on_error
+	whois_warn_on_recursive_error));
 
-my $cache = new Cache::FileCache({
-	cache_root	=> ($param->{cache_root} || '/tmp/rpsltool'),
-	cache_depth	=> ($param->{cache_depth} || 0),
-}); #XXX if $param->{cache_root};
-$whois->cache($cache) if $cache;
+##############################################################################
+my $peers = process_peers_config($peers_config);
 
-my $peers_config = do_config($peers);
-#print Data::Dumper->Dump([$peers_config], ['peers_config']); #exit 0;
-my ($conf) = do_rpsl($whois, $peers_config);
-#print Data::Dumper->Dump([$conf], ['conf']); #exit 0;
+# open the connection to the whois server and configure the default parameters
+my $whois = whois_factory($param);
+
+do_rpsl($whois, $peers);
 
 print_template($input, {
-	whois	=> $whois,
 	param	=> $param,
 	var		=> $variables,
-	conf	=> $conf,
-});
+	conf	=> $peers,
+}, $whois);
 exit 0;
 
 ##############################################################################
-# Does a first pass over the configuration, and normalizes some fields.
-sub do_config {
-	my ($peers) = @_;
-
-	my (%conf);
-	my $default = { };
-	foreach my $peer (@$peers) {
-		make_boolean($peer, qw(template customer default_aspath_filter
-			disabled));
-		make_array($peer, qw(import unimport global_unimport bgp_commands));
-
-		# store the defaults
-		if ($peer->{template}) {
-			$default = $peer;
-			delete $default->{template};
-			next;
-		}
-
-		# skip disabled entries
-		next if $peer->{disabled} or $default->{disabled};
-
-		# sanity check for the mandatory options
-		foreach my $field (qw(ip as)) {
-			die "This entry lacks the '$field' field:\n"
-				. join("\n", map { "$_: $peer->{$_}" } keys %$peer) . "\n"
-				if not $peer->{$field};
-		}
-
-		# if no AFI is defined, choose unicast IPv4 or IPv6 by looking at
-		# the peer IP address
-		my $found_afi;
-		foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
-			next if not exists $peer->{$afi};
-			$found_afi = 1;
-			last;
-		}
-		if (not $found_afi) {
-			my $afi = ($peer->{ip} =~ /:/ ? 6 : 0) ? 'ipv6' : 'ipv4';
-			$afi .= 'm' if $peer->{multicast}; # XXX untested
-			$peer->{$afi} = { };
-		}
-
-		# import the default values
-		foreach my $attr (keys %$default) {
-			next if exists $peer->{$attr} or not exists $default->{$attr};
-			$peer->{$attr} = $default->{$attr};
-		}
-
-		$conf{$peer->{ip}} = dclone($peer);
-
-		foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
-			next if not exists $peer->{$afi};
-			make_boolean($peer->{$afi}, qw(import_default_routes));
-			make_array($peer->{$afi}, qw(import unimport global_unimport
-				bgp_commands));
-
-			# import some values from the global peer configuration,
-			# if they are not defined for the AFI
-			foreach my $attr (qw(import unimport default_aspath_filter
-					maxpref peergroup)) {
-				next if exists $peer->{$afi}->{$attr} or
-					not exists $peer->{$attr};
-				$peer->{$afi}->{$attr} = $peer->{$attr};
-			}
-
-			$conf{$peer->{ip}}->{$afi} = dclone($peer->{$afi});
-		}
-	}
-	return \%conf;
-}
-
 # Performs RPSL expansion.
 sub do_rpsl {
-	my ($whois, $conf) = @_;
+	my ($whois, $peers) = @_;
 
-	my $aslistnum = $param->{aspath_acl_num} || 100;
-
-	foreach my $ip (keys %$conf) {
-		foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
-			my $neigh = $conf->{$ip}->{$afi} || next;
+	foreach my $ip (keys %$peers) {
+		foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
+			my $neigh = $peers->{$ip}->{$afi} || next;
 			my $ipv6 = $afi =~ /^ipv6/;
 
-			my (@aslist, @aslist2, @aspathlist, @routes);
 			next if not ($neigh->{import} and @{$neigh->{import}});
-			foreach (@{$neigh->{import}}) {
-				if      (/^<($aut_num|$as_set)>$/o) {
-					push(@aspathlist, expand_as_set($whois, $1));
-				} elsif (/^$aut_num$/o) {
-					push(@aslist, $_);
-				} elsif (/^$as_set$/o) {
-					push(@aslist2, expand_as_set($whois, $_));
-				} elsif (/^$route_set/o) {
-					push(@routes, expand_route_set($whois, $_, $ipv6));
-				} elsif ($ipv6     and /^$v6route$/o) {
-					push(@routes, $_);
-				} elsif (not $ipv6 and /^$v4route$/o) {
-					push(@routes, $_);
-				} else {
-					die "cannot parse '$_'";
-				}
-			}
-
-			# get the routes for the specified ASN/as-list(s)
-			push(@routes, asn_to_networks($whois, $_, $ipv6, 0))
-				foreach map { /^AS/ ? $_ : "AS$_" } @aslist;
-			push(@routes, asn_to_networks($whois, $_, $ipv6, 1))
-				foreach map { /^AS/ ? $_ : "AS$_" } @aslist2;
+			my ($routes, $aspathlist) = $whois->import($neigh->{import},
+				$ipv6, $neigh->{default_aspath_filter});
 
 			# remove unwanted routes or route-sets from the final list
+			# @unimport is a list of RPSL-style network filters
 			my @unimport;
 			foreach my $r ($neigh->{unimport}, $neigh->{global_unimport},
-					$conf->{$ip}->{global_unimport}) {
+					$peers->{$ip}->{global_unimport}) {
 				next if not ($r and @$r);
-				@unimport = map { expand_route_set($whois, $_, $ipv6) } @$r;
+				@unimport = map { $whois->expand_route_set($_, $ipv6) } @$r;
 			}
-			@routes = @{ rpsl_filter(\@routes, \@unimport) } if @unimport;
+			@$routes = @{ filter_networks($routes, \@unimport) } if @unimport;
 			# for some reason which I forgot, @routes must be cloned here
+			# uniq_list does it anyway
 			# $neigh->{import_routes} = [ @routes ] if @routes;
-			$neigh->{import_routes} = uniq_list(\@routes) if @routes;
 
-			# generate the as-path filter
-			push(@aspathlist, @aslist, @aslist2)
-				if $neigh->{default_aspath_filter};
-			if (@aspathlist) {
-				$neigh->{import_as} = [ map { s/^AS//; $_; } @aspathlist ];
-				$neigh->{aslistnum} =
-					$neigh->{aslist} ? $neigh->{aslist} : $aslistnum++;
+			# finally store the filters
+			if (@$routes) {
+				$neigh->{import_routes} = uniq_list($routes);
+			}
+			if (@$aspathlist) {
+				$neigh->{import_as} =
+					[ map { s/^AS//; $_; } @{ uniq_list($aspathlist) } ];
+				$neigh->{aslistnum} = $neigh->{aslist}
+					or die "No aslist attribute set for $ip $afi\n";
 			}
 		} # foreach $afi
 
-		if (my $backup_ip = $conf->{$ip}->{backupip}) {
-			$conf->{$backup_ip} = create_backup($conf->{$ip});
+		if (my $backup_ip = $peers->{$ip}->{backupip}) {
+			$peers->{$backup_ip} = create_backup($peers->{$ip});
 		}
 
 	}
-
-	return ($conf);
 }
 
 sub create_backup {
-	my ($neigh0) = @_;
+	my ($mainneigh) = @_;
 
-	my $newneigh = dclone($neigh0);
-	$newneigh->{ip} = $neigh0->{backupip};
+	my $newneigh = dclone($mainneigh);
+	$newneigh->{ip} = $mainneigh->{backupip};
 	$newneigh->{is_backup} = 1;	# this variable is checked in the template
 
 	# delete the elements which trigger lists generation in the template
-	delete $newneigh->{$_} foreach (qw(import_as import_routes backupip));
-	foreach my $afi (qw(ipv4 ipv6 ipv4m ipv6m)) {
+	delete $newneigh->{$_} foreach qw(import_as import_routes backupip);
+	foreach my $afi qw(ipv4 ipv6 ipv4m ipv6m) {
 		my $neigh = $newneigh->{$afi} || next;
 
-		delete $neigh->{$_} foreach (qw(import_as import_routes));
+		delete $neigh->{$_} foreach qw(import_as import_routes);
 	}
 
 	return $newneigh;
 }
 
-sub uniq_list {
-	my ($list) = @_;
-
-	my @uniq = keys %{{ map { $_ => undef } @$list }};
-	return \@uniq;
-}
-
 ##############################################################################
 sub print_template {
-	my ($input, $vars) = @_;
+	my ($input, $vars, $whois) = @_;
 
 	$Template::Config::STASH = 'Template::Stash::XS';
 	my $template = Template->new({
-#		INCLUDE_PATH => '',
 		POST_CHOMP => 1,
-#		TRIM => 1,
 		DEBUG_UNDEF => 1,
 #		DEBUG => 'parser, provider',
 	}) or early_error("Template->new: $Template::ERROR");
 
-	$template->create_vmethods; # uglyness
+	$template->create_vmethods;
+	$template->create_net_vmethods;
+	$template->create_whois_vmethods($whois);
 
 	$input = join("\n", grep(!/^#/, @$input));
 
 	my $output;
-	$template->process(\$input, $vars, \$output) or die;
+	$template->process(\$input, $vars, \$output) or die $template->error;
 
 	# remove leading empty lines
 	$output =~ s/^\n+//m;
 	print $output;
-}
-
-##############################################################################
-sub make_boolean {
-	my ($hash, @elements) = @_;
-
-	foreach my $key (@elements) {
-		next if not exists $hash->{$key};
-		$hash->{$key} = ($hash->{$key} =~ /^(y|yes|t|true|on)/i) ? 1 : 0;
-	}
-}
-
-sub make_array {
-	my ($hash, @elements) = @_;
-
-	foreach my $key (@elements) {
-		next if not exists $hash->{$key} or ref $hash->{$key};
-		$hash->{$key} = [ $hash->{$key} ];
-	}
-}
-
-sub read_file {
-	my ($file) = @_;
-
-	open(FILE, $file) or die "Cannot open $file: $!\n";
-	my @input = <FILE>;
-	close FILE;
-	chomp @input;
-	return \@input;
-}
-
-sub is_yaml {
-	my ($input) = @_;
-
-	my $max_read = 40;
-	foreach (@$input) {
-		last if $max_read-- == 0;
-		return 1 if /^---\s+#YAML:1\./;		# found
-	}
-
-	return 0;								# not found
-}
-
-##############################################################################
-sub expand_as_set {
-	my ($whois, $name, $seen, $recursive) = @_;
-	$seen ||= { };
-
-	# just return the argument if it is an aut-num
-	return ($name) if $name =~ /^$aut_num$/o;
-
-	$whois->type('as-set');
-	my $object = $whois->query($name) or die;
-	$object->query_ok($name, $recursive) or return;
-
-	return if not $object->members;
-
-	my @list;
-	foreach ($object->members) {
-		s/\s*,\s*/ /g; s/^\s+//; s/\s+$//;
-		foreach (split(/\s+/, uc $_)) {
-			next if exists $seen->{$_};
-			$seen->{$_} = 1;
-
-			if      (/^$aut_num$/o) {
-				push(@list, $_);
-			} elsif (/^$as_set$/o) {
-				my @rlist = expand_as_set($whois, $_, $seen, 1);
-				push(@list, @rlist) if @rlist;
-			} else {
-				warn "Cannot parse the following element in $name:\n$_\n";
-				#? if not $recursive;
-			}
-		}
-	}
-
-	return @list if not $object->mbrs_by_ref;
-
-	$whois->type('aut-num');
-	$whois->inverse_lookup('member-of');
-	my @objects = $whois->query($object->as_set) or die;
-	$whois->inverse_lookup('');
-	$objects[0]->query_ok($object->as_set, 1) or @objects = ();
-
-	foreach my $obj (@objects) {
-		push(@list, $obj->aut_num) unless exists $seen->{$obj->aut_num};
-	}
-
-	return @list;
-}
-
-##############################################################################
-sub expand_route_set {
-	my ($whois, $name, $ipv6, $seen, $recursive) = @_;
-	$seen ||= { };
-
-	# just return the argument if it is a route
-	return ($name) if $name =~ /^[\.:\da-fA-F\/^\-\+]+$/;
-
-	my $globalrange;
-	$globalrange = $2 if $name =~ s/^(.+)\^($range)$/$1/o;
-
-	$whois->type('route-set');
-	my $object = $whois->query($name) or die;
-	$object->query_ok($name, $recursive) or return;
-
-	return if not $object->members and not $object->mp_members;
-
-	my @routes;
-	foreach ($object->members, $object->mp_members) {
-		next if not $_;
-		s/\s*,\s*/ /g; s/^\s+//; s/\s+$//;
-		foreach (split(/\s+/, lc $_)) {
-			next if exists $seen->{$_};
-			$seen->{$_} = 1;
-
-			# routes of the wrong AFI are silently ignored
-			if      (/^$v6route$/o) {
-				push(@routes, $_) if $ipv6;
-			} elsif (/^$v4route$/o) {
-				push(@routes, $_) if not $ipv6;
-			} elsif (/^$route_set$/o) {
-				push(@routes, expand_route_set($whois, $_, $ipv6, $seen, 1));
-			} elsif (/^($route_set)\^($range)$/o) {
-				my $rs = $1; my $range = $2;
-				my @temproutes = expand_route_set($whois, $rs, $ipv6, $seen, 1);
-				@temproutes =
-					@{ rpsl_filter(\@temproutes, [ '0.0.0.0/0^' . $range ]) };
-				push(@routes, @temproutes);
-			} elsif (/^($as_set|$aut_num)(?:\^($range))?$/o) {
-				my $as = $1; my $range = $2;
-				my @temproutes;
-				push(@temproutes, asn_to_networks($whois, $_, $ipv6, undef, 1))
-					foreach expand_as_set($whois, $as, undef, 1);
-				@temproutes =
-					@{ rpsl_filter(\@temproutes, [ '0.0.0.0/0^' . $range ]) }
-						if $range;
-				push(@routes, @temproutes);
-			} else {
-				warn "Cannot parse the following element in $name (v6: $ipv6):\n$_\n";
-				#? if not $recursive;
-			}
-		}
-	}
-
-	return @routes if not $object->mbrs_by_ref;
-
-	$whois->type($ipv6 ? 'route6' : 'route');
-	$whois->inverse_lookup('member-of');
-	$whois->primary_only(1);
-	my @objects = $whois->query($object->route_set) or die;
-	$whois->inverse_lookup('');
-	$whois->primary_only(0);
-	$objects[0]->query_ok($object->route_set, 1) or @objects = ();
-
-	foreach my $obj (@objects) {
-		push(@routes, $obj->route) unless exists $seen->{$obj->route};
-	}
-
-	@routes = @{ rpsl_filter(\@routes, [ '0.0.0.0/0^' . $globalrange ]) }
-		if $globalrange;
-
-	return @routes;
-}
-
-sub asn_to_networks {
-	my ($whois, $name, $ipv6, $recursive) = @_;
-
-	$whois->type($ipv6 ? 'route6' : 'route');
-	$whois->inverse_lookup('origin');
-	$whois->primary_only(1);
-	my @objects = $whois->query($name) or die;
-	$whois->inverse_lookup('');
-	$whois->primary_only(0);
-	$objects[0]->query_ok($name, $recursive) or return;
-
-	my @list;
-	foreach my $obj (@objects) {
-		my $route = $ipv6 ? $obj->route6 : $obj->route;
-		next if not $route;
-		push(@list, $route);
-	}
-
-	return @list;
 }
 
 ##############################################################################
@@ -461,51 +163,7 @@ sub Template::create_vmethods {
 
 	my $context = $template->context;
 
-$context->define_vmethod('scalar', v4routes => sub {
-	return if not $_[0];
-	asn_to_networks($context->stash->get('whois'), $_[0], 0);
-});
-
-$context->define_vmethod('scalar', v6routes => sub {
-	return if not $_[0];
-	asn_to_networks($context->stash->get('whois'), $_[0], 1);
-});
-
-$context->define_vmethod('scalar', expand_as_set => sub {
-	return if not $_[0];
-	expand_as_set($context->stash->get('whois'), $_[0]);
-});
-
-$context->define_vmethod('scalar', expand_route_set => sub {
-	return if not $_[0];
-	expand_route_set($context->stash->get('whois'), $_[0], 0);
-});
-
-$context->define_vmethod('scalar', expand_route6_set => sub {
-	return if not $_[0];
-	expand_route_set($context->stash->get('whois'), $_[0], 1);
-});
-
-$context->define_vmethod('scalar', 'route2cisco' => sub {
-	route2cisco($_[0]);
-});
-
-$context->define_vmethod('list', 'ipsort' => sub {
-	my $networks = $_[0];
-
-	my @nets = map { Net::IP->new($_) or die "Not an IP: $_" } @$networks;
-	sort_networks(\@nets);
-	map { $_->prefix } @nets;
-});
-
-$context->define_vmethod('list', 'aggregate' => sub {
-	my $networks = $_[0];
-
-	my @nets = map { Net::IP->new($_) or die "Not an IP: $_" } @$networks;
-	sort_networks(\@nets);
-	aggregate(\@nets);
-	map { $_->prefix } @nets;
-});
+$context->define_vmethod('scalar', 'route2cisco' => \&route2cisco);
 
 $context->define_vmethod('list', 'hostroutes' => sub {
     map {
@@ -517,44 +175,15 @@ $context->define_vmethod('list', 'hostroutes' => sub {
 
 }
 
-# sort a list of prefixes
-sub sort_networks {
-	my $addrs = $_[0];
-
-	@$addrs = sort {
-		$a->bincomp('lt', $b) ? -1 : ($a->bincomp('gt', $b) ? 1 : 0);
-	} @$addrs;
-}
-
-sub aggregate {
-	my $addrs = $_[0];
-	return if not @$addrs;
-
-	# continue aggregating until there are no more changes to do
-	my $changed = 1;
-	while ($changed) {
-		$changed = 0;
-		my @new_addrs;
-		my $prev = $addrs->[0];
-		foreach my $cur (@$addrs[1 .. $#{$addrs}]) {
-			if (my $aggregated = $prev->aggregate($cur)) {
-				$prev = $aggregated;
-				$changed = 1;
-			} else {
-				push(@new_addrs, $prev);
-				$prev = $cur;
-			}
-		}
-		push(@new_addrs, $prev);
-		@$addrs = @new_addrs;
-	}
-}
-
+##############################################################################
+# converts a prefix with an optional RPSL-like length filter to an IOS
+# prefix-list entry
 sub route2cisco {
-	my $route = $_[0];
-
-	my $route_re = qr|^([\d\.:a-fA-F]+)/(\d+)(?:\^($range))?$|o;
-	my ($prefix, $len, $range) = $route =~ /$route_re/;
+	my ($prefix, $len, $range) = $_[0] =~ m!
+		^([0-9\.:a-fA-F]+)		# prefix
+		/([0-9]+)				# length
+		(?:\^ ([0-9\+\-]+) )?	# optional range
+	$!ox;
 
 	my $s;
 	if (not $prefix or not $len) {
@@ -565,9 +194,9 @@ sub route2cisco {
 		$s .= "$prefix/$len gt $range";
 	} elsif ($range eq '+') {
 		$s .= "$prefix/$len ge $range";
-	} elsif ($range =~ /^\d+$/) {
+	} elsif ($range =~ /^[0-9]+$/) {
 		$s .= "$prefix/$len le $range";
-	} elsif ($range =~ /^(\d+)\-(\d+)$/) {
+	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
 		$s .= "$prefix/$len ge $1 le $2";
 	} else {
 		die "Cannot parse this prefix: '$_'\n";
@@ -576,140 +205,11 @@ sub route2cisco {
 	return $s
 }
 
-sub difference {
-	my ($list1, $list2) = @_;
-
-	my (%items2, @diff);
-	$items2{$_} = undef foreach @$list2;
-
-	foreach (@$list1) {
-		next if exists $items2{$_};
-		push(@diff, $_);
-	}
-
-	return \@diff;
-}
-
-# It assumes that all routes are normalized (have the host part set to 0).
-sub rpsl_filter {
-	my ($routes, $filters, $reverse) = @_;
-
-	return [ @$routes ] if not @$filters;
-
-	# cache the objects representing the parsed filters
-	my @filters_obj = map {
-		my ($froute, $flen, $frange) =
-			$_ =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
-		die "invalid filter '$_'\n" if not defined $froute;
-		my $filter = new Net::IP("$froute");
-		die Net::IP::Error() . "\n" if not defined $filter;
-		$filter->{flen} = $flen;
-		$filter->{frange} = $frange;
-		$filter;
-	} @$filters;
-
-	# compare each route against the filters
-	my @ok;
-	foreach my $rroute (@$routes) {
-		my $route = new Net::IP($rroute) or die Net::IP::Error() . "\n";
-		my $match;
-		foreach (@filters_obj) {
-			my $rf = $route->rpsl_filter($_);
-			die Net::IP::Error() . "\n" if not defined $rf;
-			if ($rf) { $match = 1; last };
-		}
-		push(@ok, $rroute) if $match xor $reverse;
-	}
-	return \@ok;
-}
-
-=head2 rpsl_filter
-
-This function checks the prefix with a route filter expressed in the RPSL
-syntax. It returns true if $ip is allowed by the $filter.
-The $filter may be a string or a Net::IP object with additional B<frange>
-and B<flen> members.
-
-C<@list = $ip-E<gt>rpsl_filter($filter));>
-
-=cut
-
-sub Net::IP::rpsl_filter {
-	my ($self, $f) = @_;
-
-	my ($froute, $flen, $frange, $filter);
-	if (ref $f) {
-		die if ref ne 'Net::IP';
-		$filter = $f;
-		$flen = $filter->{flen};
-		$frange = $filter->{frange};
-	} else {
-		($froute, $flen, $frange) =
-			$f =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
-		if (not defined $froute) {
-			$Net::IP::ERROR = "invalid filter '$f'";
-			return undef;
-		}
-		my $filter = new Net::IP("$froute");
-		return undef if not defined $filter;
-	}
-
-	return 0 if $self->version != $filter->version;
-
-	my $overlap = $self->overlaps($filter); # A: route, B: filter
-	return undef if not defined $overlap;
-	return 0 if $overlap == $IP_NO_OVERLAP
-			 or $overlap == $IP_PARTIAL_OVERLAP
-			 or $overlap == $IP_B_IN_A_OVERLAP;
-
-	my ($lmin, $lmax);
-	if    (not defined $frange)			{ $lmin =          $lmax = $flen; }
-	elsif ($frange eq '+')				{ $lmin = $flen;   $lmax = 128; }
-	elsif ($frange eq '-')				{ $lmin = $flen+1; $lmax = 128; }
-	elsif ($frange =~ /^\d+$/)			{ $lmin =          $lmax = $frange; }
-	elsif ($frange =~ /^(\d+)-(\d+)$/)	{ $lmin = $1;      $lmax = $2; }
-	else { $Net::IP::ERROR =  "invalid filter '$filter'"; return undef; }
-
-	# $IP_IDENTICAL, $IP_A_IN_B_OVERLAP
-	my $rlen = $self->prefixlen;
-	return 1 if $rlen >= $lmin and $rlen <= $lmax;
-	return 0;
-}
-
-##############################################################################
-sub show_cache_misses {
-	my $real_cache_get = \&Cache::BaseCache::get;
-
-	no warnings 'redefine';
-	*Cache::BaseCache::get = sub {
-		my $result = &$real_cache_get(@_);
-		print STDERR "============> CACHE MISS: $_[1]\n" if not $result;
-		return $result;
-	};
-}
-
-package Net::Whois::RIPE::Object;
-use strict;
-use warnings;
-
-sub query_ok {
-	my ($self, $name, $recursive) = @_;
-
-	return 1 if $self->success;
-
-	my $warn = 0;
-	if ($recursive) {
-		$warn = 1 if $warn_on_recursive_error;
-	} else {
-		$warn = 1 if $warn_on_error;
-	}
-
-	if ($self->error =~ /^101:/) {
-		warn "QUERY FAILED ($name): " . $self->error . "\n"
-			if $warn or $die_on_error;
-		exit 1 if $die_on_error;
-		return;
-	}
-	die "QUERY FAILED ($name): " . $self->error . "\n";
+sub usage {
+	print STDERR <<END;
+Usage: rpsltool CONFIG-FILE
+       rpsltool TEMPLATE-FILE
+END
+	exit(shift);
 }
 

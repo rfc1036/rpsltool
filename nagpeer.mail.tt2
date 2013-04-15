@@ -1,0 +1,51 @@
+From: Marco d'Itri <md@linux.it>
+To: [% peeremail +%]
+[% IF param.bcc %]
+Bcc: [% param.bcc +%]
+[% END %]
+Subject: reti annunciate da AS[% as +%]
+User-Agent: nagpeer/1.0
+
+(Questo è un testo standard, generato semiautomaticamente.)
+
+Durante la revisione periodica dei nostri filtri BGP sono state rilevate
+delle incongruenze tra le reti annunciate dal vostro autonomous system
+AS[% as %] e quelle dichiarate nel database di RIPE con l'espansione del
+vostro oggetto as-set [% top_object %].
+
+In dettaglio:
+[% IF asn.size %]
+
+* i seguenti autonomous system di vostri clienti non sono elencati
+  nell'as-set:
+
+[% FOREACH a = asn.asnsort %]
+[% a +%]
+[% END %]
+
+Se un oggetto as-set non rispecchia gli autonomous system effettivamente
+annunciati non è possibile per i propri peer generare automaticamente i
+filtri delle sessioni BGP.
+[% END %]
+[% IF routes.size %]
+
+* mancano gli oggetti route corrispondenti alle seguenti reti:
+
+[% FOREACH r = routes.ipsort %]
+[% r %][% IF paths.$r %] ([% paths.$r %])[% END +%]
+[% END %]
+
+Lo scopo degli oggetti route è dichiarare quale autonomous system è
+autorizzato ad annunciare una certa rete. Registrandoli si permette ai
+propri peer di generare automaticamente i loro filtri BGP in ingresso,
+garantendone quindi l'aggiornamento tempestivo senza bisogno di
+modifiche manuali.
+[% END %]
+
+
+Ringraziandovi per l'attenzione, rimango a disposizione per ogni
+chiarimento che fosse necessario.
+
+-- 
+ciao,
+Marco
