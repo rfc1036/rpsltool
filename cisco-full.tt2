@@ -45,8 +45,8 @@
 [% NEXT IF NOT neigh.$afi.import_as.size %]
 no ip as-path access-list [% neigh.$afi.aslistnum +%]
 [% aslist = neigh.$afi.import_as.nsort %]
-[% IF aslist.size > 35 %]
-[% WHILE aslist.size; l = aslist.splice(0, 35) %]
+[% IF aslist.size > 30 %]
+[% WHILE aslist.size; l = aslist.splice(0, 30) %]
 ip as-path access-list [% neigh.$afi.aslistnum %] permit _([% l.join('|') %])$
 [% END %]
 [% ELSE %]
