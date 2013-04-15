@@ -1,0 +1,112 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=yaml shiftwidth=2 expandtab autoindent
+# This file contains three YAML documents, separated by "---".
+# See http://www.yaml.org/refcard.html for help on the YAML syntax.
+--- #YAML:1.0
+# Misc parameters.
+aspath_acl_num: 100
+template: cisco-full.tt2
+cache_root: /home/md/projects/rpslng/rpsltool
+cache_depth: 0
+
+---
+# These variables are referenced in the generic configuration template.
+# They are just (examples of) parameters which usually need to be
+# customized to allow sharing a template among different POPs.
+# You may have different sets of parameters for unicast/multicast or
+# have the template use the same variable.
+# Again, these are just variables substituted to placeholders in the template.
+ipv4:
+  customers:
+    localpref: 350
+    community: 65000:65000
+  peers:
+    #localpref: 250
+    localpref: 300
+    #community: 65000:65002
+    community: 65000:65011
+ipv6:
+  customers:
+    localpref: 350
+    community: 65000:65006
+  peers:
+    localpref: 300
+    community: 65000:65099
+
+---
+# Details about the peers.
+# The attributes import, unimport and bgp_commands are automatically
+# promoted to lists if scalar.
+# Elements with the "template" attribute sets the default values for the
+# following elements (until a new template element is defined).
+# If the AFI is not specified, it's guessed by looking at the peer IP address.
+
+# customers
+- template: y
+  customer: y
+  peergroup: CUSTOMER
+  # Create an as-path filter for all aut-nums and as-sets imported for
+  # the purpose of creating prefix-filters. Probably not useful.
+  #default_aspath_filter: y
+
+- as: 20912
+  description: Panservice
+  ip: 2001:1418:1:400::22
+  import: AS20912
+  bgp_commands: 'password 7 00091701054F0E'
+
+- as: 12637
+  description: Seeweb
+  ip: 2001:1418:1:400::2E
+  import: AS12637
+  ipv6: { bgp_commands: override-capability-neg }
+
+- as: 34695
+  description: E4A
+  ip: 2001:1418:1:400::3A
+  import: AS34695
+  ipv6: { bgp_commands: override-capability-neg }
+
+# peers
+- template: y
+  customer: n
+  peergroup: PEER
+# remove these prefixes from the final list of imported routes for all peers
+#  global_unimport: [ 1234:5678::/32, AS65000:RS-UNWANTED, ::/48^- ]
+
+- as: 5609
+  description: TILAB
+  ip: 3FFE:1001:1:F024::1
+  # this peer lacks a route6 object, so instead of importing routes by their
+  # ASN we list them and add an explicit as-path filter
+  import: [ AS5609, 3FFE:1000::/24, 2001:6B8::/32 ]
+
+- as: 20745
+  description: CNIT
+  ip: 3FFE:830F::34
+  ipv6:
+    import: [ AS20745, 3FFE:8300::/28 ]
+  ipv6m:
+    import: [ AS20745, 3FFE:8300::/28 ]
+
+- as: 25336
+  description: XS26
+  ip: 2001:1418:1:400::32
+  import: AS-XS26
+# remove these prefixes from the final list of imported routes
+# route-sets too can be used in un(import) statements
+#  unimport: [ 1234:5678::/32, AS65000:RS-UNWANTED ]
+  ipv6: { bgp_commands: override-capability-neg }
+
+- as: 29449
+  description: TopneT
+  ip: 2001:1418:1:400::16
+  import: AS29449
+
+- as: 3257
+  # this element will be ignored
+  disabled: y
+  description: Tiscali
+  ip: 2001:7F8:B:100:1D1:A5D0:3257:18
+  maxpref: 100
+

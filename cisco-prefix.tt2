@@ -1,0 +1,49 @@
+! lists !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% NEXT IF NOT neigh.$afi.import_as.size %]
+no ip as-path access-list [% neigh.$afi.aslistnum +%]
+[% aslist = neigh.$afi.import_as.nsort %]
+[% IF aslist.size > 35 %]
+[% WHILE aslist.size; l = aslist.splice(0, 35) %]
+ip as-path access-list [% neigh.$afi.aslistnum %] permit _([% l.join('|') %])$
+[% END %]
+[% ELSE %]
+ip as-path access-list [% neigh.$afi.aslistnum %] permit ^(_([% aslist.join('|') %]))+$
+[% END %]
+!
+[% END %]
+[% END %]
+
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% IF    afi == 'ipv6';
+     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6';
+   ELSIF afi == 'ipv6m';
+     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6M';
+   ELSIF afi == 'ipv4m';
+     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-INM';
+   ELSE;
+     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-IN';
+   END;
+%]
+[% NEXT IF NOT neigh.$afi.import_routes.size %]
+no [% acltype %] prefix-list [% aclname +%]
+[% FOREACH route = neigh.$afi.import_routes %]
+[% acltype %] prefix-list [% aclname %] permit [% route.route2cisco +%]
+[% END %]
+!
+[% IF neigh.customer %]
+no [% acltype %] prefix-list [% aclname +%]-HR
+[% FOREACH route = neigh.$afi.import_routes.hostroutes %]
+[% acltype %] prefix-list [% aclname %]-HR permit [% route.route2cisco +%]
+[% END %]
+!
+[% END %]
+[% END %]
+[% END %]
+
+end
+

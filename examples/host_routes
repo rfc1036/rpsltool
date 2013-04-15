@@ -1,0 +1,15 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=tt2
+
+[% routes = BLOCK %]
+3FFE:1000::/24
+2001:6B8::/32
+10.0.0.0/24
+10.0.0.0/16^24
+[% END %] 
+[%
+   hroutes = routes.split.hostroutes;
+   FOREACH route = hroutes;
+     route _ "\n";
+   END;
+%]

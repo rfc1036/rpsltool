@@ -1,0 +1,112 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=yaml shiftwidth=2 expandtab autoindent
+--- #YAML:1.0
+# Misc parameters.
+aspath_acl_num: 100
+#template: cisco-prefix.tt2
+template: cisco-full.tt2
+cache_root: /home/md/rpsltool
+cache_depth: 0
+
+---
+akamai: 65000:65198
+ipv4:
+  customers:
+    localpref: 350
+    community: 65000:65000
+  peers:
+    localpref: 250
+    community: 65000:65002
+ipv6:
+  customers:
+    localpref: 350
+    community: 65000:65000
+  peers:
+    localpref: 250
+    community: 65000:65002
+
+---
+# Details about the peers.
+# The attributes import, unimport and bgp_commands are automatically
+# promoted to lists if scalar.
+# Elements with the "template" attribute sets the default values for the
+# following elements (until a new template element is defined).
+# If the AFI is not specified, it's guessed by looking at the peer IP address.
+
+# transit peers
+- template: y
+  customer: y
+  disabled: y
+
+- as: 8674
+  description: I-ROOT
+  ip: 217.29.66.57
+  ipbackup: 217.29.67.57
+  import: AS-NETNOD-ANYCAST
+
+- as: 12654
+  description: RIPE RRC10
+  ip: 217.29.66.6
+  import: AS12654:RS-RIS
+
+- as: 12654
+  description: RIPE RRC10
+  ip: 2001:7F8:B:100:1D1:A5D1:2654:6
+  import: AS12654:RS-RIS
+
+# peers
+- template: y
+  customer: n
+  peergroup: MIX-IT-IPv4
+  default_aspath_filter: y
+
+- as: 137
+  description: GARR
+  import: <AS-GARR>
+  ip: 217.29.66.39
+  #backupip: 217.29.67.39
+  ipv4: { aslist: 37 }
+
+- as: 1267
+  description: WIND
+  import: [ <AS-INFOSTRADA>, <AS9035>, <AS21291>, <AS31706>, <AS2164> ]
+  ip: 217.29.66.9
+  ipv4: { aslist: 19 }
+
+- as: 2686
+  description: "AT&T"
+  import: <AS-IGNEMEA>
+  ip: 217.29.66.55
+  ipv4: { aslist: 46 }
+
+- as: 3269
+  description: Telecom Italia OPB
+  import: [ <AS-IBSCUST>, <AS15746>, <AS16122>, <AS21115>, <AS28937>, <AS12803>, <AS29082>, <AS31570>, <AS31617>  ]
+  ip: 217.29.66.35
+  ipv4: { aslist: 36 }
+
+# ...
+
+##############################################################################
+- template: y
+  customer: n
+  peergroup: MIX-IT-IPv6
+
+- as: 3257
+  description: Tiscali
+  ip: 2001:7F8:B:100:1D1:A5D0:3257:18
+  maxpref: 150
+
+- as: 5602
+  description: KPNQwest Italia
+  ip: 2001:7F8:B:100:1D1:A5D0:5602:10
+  import: [ AS5602, AS29449 ]
+
+- as: 12565
+  description: Planet
+  ip: 2001:7F8:B:100:1D1:A5D1:2565:51
+  #import: AS12565
+  import: 2001:1548::/32
+
+# ...
+

@@ -1,0 +1,328 @@
+router bgp 65000
+ neighbor PEER peer-group
+ neighbor PEER version 4
+ neighbor CUSTOMER peer-group
+ neighbor CUSTOMER version 4
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+ neighbor [% ip %] remote-as [% neigh.as +%]
+[% IF neigh.peergroup %]
+ neighbor [% ip %] peer-group [% neigh.peergroup +%]
+[% ELSE %]
+ neighbor [% ip %] version 4
+[% END %]
+[% IF neigh.description %]
+ neighbor [% ip %] description [% neigh.description +%]
+[% END %]
+[% FOREACH cmd = neigh.bgp_commands %]
+ neighbor [% ip %] [% cmd +%]
+[% END %]
+[% END %]
+[%# IPv4 ###################################################################%]
+ address-family ipv4
+ neighbor PEER send-community
+ neighbor PEER soft-reconfiguration inbound
+ neighbor PEER route-map MAP-PEER-OUT out
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv4 %]
+[% IF neigh.peergroup %]
+ neighbor [% ip %] peer-group [% neigh.peergroup +%]
+[% ELSE %]
+ neighbor [% ip %] send-community
+ neighbor [% ip %] soft-reconfiguration inbound
+[% IF neigh.customer %]
+ neighbor [% ip %] route-map MAP-CUST-OUT out
+[% ELSE %]
+ neighbor [% ip %] route-map MAP-PEER-OUT out
+[% END %]
+[% END %]
+ neighbor [% ip %] route-map AS[% neigh.as %]-IN in
+[% IF neigh.ipv4.maxpref %]
+ neighbor [% ip %] maximum-prefix [% neigh.ipv4.maxpref %] 85
+[% END %]
+[% FOREACH cmd = neigh.ipv4.bgp_commands %]
+ neighbor [% ip %] [% cmd +%]
+[% END %]
+[% END %]
+ exit-address-family
+ !
+[%# IPv4 multicast #########################################################%]
+ address-family ipv4 multicast
+ neighbor PEER send-community
+ neighbor PEER soft-reconfiguration inbound
+ neighbor PEER route-map MAP-PEER-OUTM out
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv4m %]
+[% IF neigh.peergroup %]
+ neighbor [% ip %] peer-group [% neigh.peergroup +%]
+[% ELSE %]
+ neighbor [% ip %] soft-reconfiguration inbound
+ neighbor [% ip %] route-map MAP-PEER-OUTM out
+ neighbor [% ip %] route-map AS[% neigh.as %]-OUTM in
+[% END %]
+ neighbor [% ip %] route-map AS[% neigh.as %]-INM in
+[% IF neigh.ipv4m.maxpref %]
+ neighbor [% ip %] maximum-prefix [% neigh.ipv4m.maxpref %] 85
+[% END %]
+[% FOREACH cmd = neigh.ipv4m.bgp_commands %]
+ neighbor [% ip %] [% cmd +%]
+[% END %]
+[% END %]
+ exit-address-family
+!
+[%# IPv6 ###################################################################%]
+ address-family ipv6
+ neighbor PEER send-community
+ neighbor PEER soft-reconfiguration inbound
+ neighbor PEER route-map MAP-PEER-OUT6 out
+ neighbor CUSTOMER send-community
+ neighbor CUSTOMER soft-reconfiguration inbound
+ neighbor CUSTOMER route-map MAP-CUST-OUT6 out
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv6 %]
+[% IF neigh.peergroup %]
+ neighbor [% ip %] peer-group [% neigh.peergroup +%]
+[% ELSE %]
+ neighbor [% ip %] send-community
+ neighbor [% ip %] soft-reconfiguration inbound
+ neighbor [% ip %] route-map AS[% neigh.as %]-OUT6 in
+[% END %]
+ neighbor [% ip %] route-map AS[% neigh.as %]-IN6 in
+[% IF neigh.ipv6.maxpref %]
+ neighbor [% ip %] maximum-prefix [% neigh.ipv6.maxpref %] 85
+[% END %]
+[% FOREACH cmd = neigh.ipv6.bgp_commands %]
+ neighbor [% ip %] [% cmd +%]
+[% END %]
+[% END %]
+ exit-address-family
+ !
+[%# IPv6 multicast #########################################################%]
+ address-family ipv6 multicast
+ neighbor PEER send-community
+ neighbor PEER soft-reconfiguration inbound
+ neighbor PEER route-map MAP-PEER-OUT6M out
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv6m %]
+[% IF neigh.peergroup %]
+ neighbor [% ip %] peer-group [% neigh.peergroup +%]
+[% ELSE %]
+ neighbor [% ip %] soft-reconfiguration inbound
+ neighbor [% ip %] route-map MAP-PEER-OUT6M out
+ neighbor [% ip %] route-map AS[% neigh.as %]-OUT6M in
+[% END %]
+ neighbor [% ip %] route-map AS[% neigh.as %]-IN6M in
+[% IF neigh.ipv6m.maxpref %]
+ neighbor [% ip %] maximum-prefix [% neigh.ipv6m.maxpref %] 85
+[% END %]
+[% FOREACH cmd = neigh.ipv6m.bgp_commands %]
+ neighbor [% ip %] [% cmd +%]
+[% END %]
+[% END %]
+ exit-address-family
+!
+
+! IPv4 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv4 %]
+[% NEXT IF neigh.is_backup %]
+!
+no route-map AS[% neigh.as %]-IN permit 10000
+route-map AS[% neigh.as %]-IN permit 10000
+[% IF neigh.ipv4.import_routes.size %]
+ match ip address prefix-list AS[% neigh.as %]-IN
+[% ELSE %]
+ match ip address prefix-list pl100
+[% END %]
+[% IF neigh.ipv4.aslistnum %]
+ match as-path [% neigh.ipv4.aslistnum +%]
+[% END %]
+ set comm-list REMOVE-LOCAL delete
+[% IF neigh.customer %]
+ set local-preference [% var.ipv4.customers.localpref +%]
+ set community [% var.ipv4.customers.community %] additive
+[% ELSE %]
+ set local-preference [% var.ipv4.peers.localpref +%]
+ set community [% var.ipv4.peers.community %][% IF neigh.akamai %][% ' ' _ var.akamai %][% END %] additive
+[% END %]
+!
+[% END %]
+
+! IPv4 multicast !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv4m %]
+[% NEXT IF neigh.is_backup %]
+!
+no route-map AS[% neigh.as %]-IN permit 10000
+route-map AS[% neigh.as %]-IN permit 10000
+[% IF neigh.ipv4m.import_routes.size %]
+ match ip address prefix-list AS[% neigh.as %]-INM
+[% END %]
+[% IF neigh.ipv4m.aslistnum %]
+ match as-path [% neigh.ipv4.aslistnum +%]
+[% END %]
+ set comm-list REMOVE-LOCAL delete
+[% IF neigh.customer %]
+ set local-preference [% var.ipv4.customers.localpref +%]
+ set community [% var.ipv4.customers.community %] additive
+[% ELSE %]
+ set local-preference [% var.ipv4.peers.localpref +%]
+ set community [% var.ipv4.peers.community %] additive
+[% END %]
+!
+[% END %]
+
+! IPv6 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv6 %]
+[% NEXT IF neigh.is_backup %]
+[% IF neigh.customer AND neigh.ipv6.import_routes.size %]
+!
+no route-map AS[% neigh.as %]-IN6 permit 9000
+route-map AS[% neigh.as %]-IN6 permit 9000
+ match community 99 BLACKHOLE
+ match ipv6 address prefix-list AS[% neigh.as %]-IN6-HR
+ set comm-list REMOVE-LOCAL delete
+ set ipv6 next-hop 2001:1418::ffff:ffff:ffff:666
+ set local-preference [% var.ipv6.customers.localpref +%]
+!
+[% END %]
+no route-map AS[% neigh.as %]-IN6 permit 10000
+route-map AS[% neigh.as %]-IN6 permit 10000
+[% IF neigh.ipv6.import_routes.size %]
+ match ipv6 address prefix-list AS[% neigh.as %]-IN6
+[% END %]
+[% IF neigh.ipv6.aslistnum %]
+ match as-path [% neigh.ipv6.aslistnum +%]
+[% END %]
+ set comm-list REMOVE-LOCAL delete
+[% IF neigh.customer %]
+ set local-preference [% var.ipv6.customers.localpref +%]
+ set community [% var.ipv6.customers.community %] additive
+[% ELSE %]
+ set local-preference [% var.ipv6.peers.localpref +%]
+ set community [% var.ipv6.peers.community %] additive
+[% END %]
+!
+
+[% END %]
+
+! IPv6 multicast !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% NEXT IF NOT neigh.ipv6m %]
+[% NEXT IF neigh.is_backup %]
+!
+no route-map AS[% neigh.as %]-IN6M permit 10000
+route-map AS[% neigh.as %]-IN6M permit 10000
+[% IF neigh.ipv6m.import_routes.size %]
+ match ipv6 address prefix-list AS[% neigh.as %]-IN6M
+[% END %]
+[% IF neigh.ipv6m.aslistnum %]
+ match as-path [% neigh.ipv6m.aslistnum +%]
+[% END %]
+ set comm-list REMOVE-LOCAL delete
+[% IF neigh.customer %]
+ set local-preference [% var.ipv6.customers.localpref +%]
+ set community [% var.ipv6.customers.community %] additive
+[% ELSE %]
+ set local-preference [% var.ipv6.peers.localpref +%]
+ set community [% var.ipv6.peers.community %] additive
+[% END %]
+!
+
+[% END %]
+
+! generic outbound route-maps !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+no route-map MAP-CUST-OUT6
+!
+route-map MAP-CUST-OUT6 deny 3010
+ match community 99 BLACKHOLE
+!
+route-map MAP-CUST-OUT6 permit 10000
+!
+
+no route-map MAP-CUST-OUT6M
+!
+route-map MAP-CUST-OUT6M deny 3010
+ match community 99 BLACKHOLE
+!
+route-map MAP-CUST-OUT6M permit 10000
+!
+
+no route-map MAP-PEER-OUT6
+!
+route-map MAP-PEER-OUT6 deny 3010
+ match community 99 NO-ANNOUNCE-TOPIX
+!
+route-map MAP-PEER-OUT6 permit 4010
+ match community 99 PREPEND-TOPIX
+ set as-path prepend 65000 65000 65000
+ continue
+!
+route-map MAP-PEER-OUT6 permit 10000
+ match community 99 CUSTOMER6
+!
+
+no route-map MAP-PEER-OUT6M
+!
+route-map MAP-PEER-OUT6M permit 10000
+ match community 99 CUSTOMER6
+!
+
+! lists !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% NEXT IF NOT neigh.$afi.import_as.size %]
+no ip as-path access-list [% neigh.$afi.aslistnum +%]
+[% aslist = neigh.$afi.import_as.nsort %]
+[% IF aslist.size > 35 %]
+[% WHILE aslist.size; l = aslist.splice(0, 35) %]
+ip as-path access-list [% neigh.$afi.aslistnum %] permit _([% l.join('|') %])$
+[% END %]
+[% ELSE %]
+ip as-path access-list [% neigh.$afi.aslistnum %] permit ^(_([% aslist.join('|') %]))+$
+[% END %]
+!
+[% END %]
+[% END %]
+
+[% FOREACH ip = conf.keys.sort %]
+[% neigh = conf.$ip %]
+[% FOREACH afi = [ 'ipv4', 'ipv6', 'ipv4m', 'ipv6m' ] %]
+[% IF    afi == 'ipv6';
+     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6';
+   ELSIF afi == 'ipv6m';
+     acltype = 'ipv6'; aclname = 'AS' _ neigh.as _ '-IN6M';
+   ELSIF afi == 'ipv4m';
+     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-INM';
+   ELSE;
+     acltype = 'ip';   aclname = 'AS' _ neigh.as _ '-IN';
+   END;
+%]
+[% NEXT IF NOT neigh.$afi.import_routes.size %]
+no [% acltype %] prefix-list [% aclname +%]
+[% FOREACH route = neigh.$afi.import_routes %]
+[% acltype %] prefix-list [% aclname %] permit [% route.route2cisco +%]
+[% END %]
+!
+[% IF neigh.customer %]
+no [% acltype %] prefix-list [% aclname +%]-HR
+[% FOREACH route = neigh.$afi.import_routes.hostroutes %]
+[% acltype %] prefix-list [% aclname %]-HR permit [% route.route2cisco +%]
+[% END %]
+!
+[% END %]
+[% END %]
+[% END %]
+
+end
+

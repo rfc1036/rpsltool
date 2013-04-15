@@ -1,0 +1,43 @@
+#!/usr/bin/env rpsltool
+# vim: syntax=tt2
+
+[%#
+   #rs = 'AS3320:RS-PA-TELEKOM';
+   rs = 'AS702:RS-PT-CUSTOMER^16';
+   FOREACH r = rs.expand_route_set;
+     r _ "\n";
+   END
+%]
+
+[%
+   ass = 'AS-INFRACOMSPA';
+   FOREACH as = ass.expand_as_set;
+     as _ "\n";
+   END
+%]
+
+[%#
+   as = 'AS12779';
+   xroutes = as.v4routes;
+   xroutes.aggregate.join("\n");
+%]
+
+[%#
+   as_sets = [ 'AS12779:AS-CUSTOMERS-V6' ];
+   FOREACH as_set = as_sets;
+   as_set; "\n";
+     as_list = as_list.merge(as_set.expand_as_set);
+   END;
+   # remove the empty item added by merging an empty list
+#   CALL as_list.shift IF as_list.first == '';
+   CALL as_list.shift;
+
+   FOREACH as = as_list.unique;
+   as; "\n";
+   xroutes = xroutes.merge(as.v6routes);
+   END;
+#   CALL xroutes.shift IF xroutes.first == '';
+   CALL xroutes.shift;
+   xroutes.aggregate.join("\n");
+%]
+

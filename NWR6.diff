@@ -1,0 +1,160 @@
+diff -urNp Net-Whois-RIPE-1.22.orig/Object/Object.pm Net-Whois-RIPE-1.22/Object/Object.pm
+--- Net-Whois-RIPE-1.22.orig/Object/Object.pm	2005-05-09 05:19:39.000000000 +0200
++++ Net-Whois-RIPE-1.22/Object/Object.pm	2005-06-02 00:59:27.000000000 +0200
+@@ -52,9 +52,10 @@ sub parse 
+ {
+     my $self   = shift;
+     my $handle = shift;
+-     my $persistance = shift;
++    my $persistance = shift;
+ 
+     my $found_record = 0;
++    my $precedent_attribute;
+     local $/ = "\n";
+     local $_;
+ 
+@@ -85,18 +86,22 @@ sub parse 
+         /^WARNING:\s+(.*)/               and $self->_wrn($1), next;
+ 
+         # ok, now try to match attribute value pairs 
+-        if (/^\+\s+(.*)$/ and $self->{precedent_attribute}) {
+-            $self->add($self->{precedent_attribute},$1);
+-        } elsif (my ($attribute, $value) = /^([\w\-]+|\*\w\w):\s+(.*)$/) {
++        if (my ($value2) = /^\+?\s+(.+)$/ and $precedent_attribute){
+             # strip end of line comments and trailing white space
++            $value2 =~ s/#.*$// unless exists $Free_Form{$precedent_attribute};
++            $value2 =~ s/\s+$//;
++
++            $self->add($precedent_attribute, $value2);
++        } elsif (my ($attribute, $value) = /^([\w\-]+|\*\w\w):\s+(.*)$/) {
+             $value =~ s/#.*$// unless exists $Free_Form{$attribute};
+             $value =~ s/\s+$//;
+ 
+             $self->add($attribute, $value);
+-            $self->{precedent_attribute} = $attribute;
++            $precedent_attribute = $attribute;
+             $found_record = 1;
++        } elsif (/^([\w\-]+|\*\w\w):\s*$/) {
+         } else {
+-            $self->_err("unparseable line: <<$_>>");
++            $self->_err("unparseable line: '$_'");
+         }
+     }
+ 
+@@ -194,14 +199,14 @@ sub debug 
+     return @_ ? $self->{_debug} = shift : $self->{_debug};
+ }
+ 
+-sub AUTOLOAD 
++sub AUTOLOAD
+ {
+     my $self = shift;
+     my $type = ref($self) or croak "$self is not an object";
+ 
+     my $name = $AUTOLOAD;
+-    $name =~ s/.*://;   # strip fully-qualified portion
+-    $name =~ s/_/-/;    # change _ to - in method name: same as 'add'
++    $name =~ s/^.*://;   # strip fully-qualified portion
++    $name =~ s/_/-/g;    # change _ to - in method name: same as 'add'
+ 
+     unless (exists $self->{_methods}->{$name} ) {
+         carp "I don't know about method `$name' in class $type" if $self->debug;
+diff -urNp Net-Whois-RIPE-1.22.orig/RIPE.pm Net-Whois-RIPE-1.22/RIPE.pm
+--- Net-Whois-RIPE-1.22.orig/RIPE.pm	2005-05-09 05:19:39.000000000 +0200
++++ Net-Whois-RIPE-1.22/RIPE.pm	2005-06-12 13:37:13.000000000 +0200
+@@ -19,7 +19,7 @@ use constant SLEEP_INTERVAL=> 1;     # t
+ 
+ 
+ use vars qw($VERSION);
+-$VERSION = do {my @r=(q$Revision: 1.22 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
++$VERSION = '1.22.1';
+ 
+ # class wide debug flag 0=off,1=on,2=on for IO::Socket
+ my $DEBUG=0;
+@@ -167,6 +167,17 @@ sub query 
+         return undef;
+     }
+ 
++    my $string;
++       unless ($string = $self->_options($query_key)) {
++        carp "query: unable to parse options" if $self->debug;
++        return undef;
++    }
++
++    if ($self->{cache}) {
++        my $object = $self->{cache}->get($string);
++        return wantarray ? @$object : $object->[0] if $object;
++    }
++
+     # TODO - close the connection pseudo gracefully if the timeout value
+     # expires. allow user to set timeouts?
+ 
+@@ -176,13 +187,11 @@ sub query 
+         return undef;        
+     }
+ 
+-    my $string;
+-       unless ($string = $self->_options($query_key)) {
+-        carp "query: unable to parse options" if $self->debug;
+-        return undef;
+-    }
++    my @object = $self->_query($string."\n", "Net::Whois::RIPE::Object");
++
++    $self->{cache}->set($string, \@object) if $self->{cache} and @object;
+ 
+-    return $self->_query($string."\n", "Net::Whois::RIPE::Object");
++    return wantarray ? @object : $object[0];
+ }
+ 
+ sub update 
+@@ -213,6 +222,11 @@ sub _query 
+     my $ripe_type = shift;
+ 
+     my $sock;
++    my @objects;
++
++    my $connection_attempts = 0;
++    while ($connection_attempts < MAX_RETRY_ATTEMPTS) {
++
+     unless ($sock = $self->_connect) {
+         carp "_query: unable to obtain socket" if $self->debug;    
+         return undef;        
+@@ -226,7 +240,6 @@ sub _query 
+     $sock->flush;
+ 
+     my $bytes = 0;
+-    my @objects;
+     my $max = $self->max_read_size;
+ 
+     while (my $t = $ripe_type->new($sock, $self->{FLAG_k})) {
+@@ -247,6 +260,17 @@ sub _query 
+         last if $sock->eof or not wantarray
+     }
+ 
++        # exit the retry loop unless the client has been disconnected
++        last unless not @objects and $sock->eof;
++
++        carp "_query: disconnected by server " . $self->{FLAG_h}
++            . ", trying again..." if $self->debug;
++        $self->_disconnect;
++        sleep SLEEP_INTERVAL;
++        $connection_attempts++;
++        next;
++    }
++
+   if ($sock and $self->{FLAG_k})
+     { $sock->flush;
+       $self->{SOCKET}->flush; }
+@@ -265,6 +289,12 @@ sub max_read_size 
+     @_ ? $self->{MAX_READ_SIZE} = 0+shift : $self->{MAX_READ_SIZE};
+ }
+ 
++sub cache
++{
++    return $_[0]->{cache} if not defined $_[1];
++    $_[0]->{cache} = $_[1];
++}
++
+ sub search_all     {$_[0]->{FLAG_a} = 1}
+ sub fast_raw       {$_[0]->{FLAG_F} = 1}
+ sub set_persistance {$_[0]->{FLAG_a} = 1}

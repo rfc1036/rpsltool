@@ -1,0 +1,5 @@
+If the expansion of the arguments of an import attribute is empty then
+everything is accepted.
+
+A lot of documentation is needed.
+

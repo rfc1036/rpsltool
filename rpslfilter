@@ -1,0 +1,110 @@
+#!/usr/bin/perl -w
+
+use YAML;
+use Net::IP;
+use strict;
+
+my ($routes, $filter) = YAML::Load(join("\n", <DATA>));
+
+$routes = rpsl_filter($routes, $filter);
+print join("\n", @$routes) . "\n";
+
+# It assumes that all routes are normalized (have the host part set to 0).
+sub rpsl_filter {
+	my ($routes, $filters, $reverse) = @_;
+
+	return [ @$routes ] if not @$filters;
+
+	# cache the objects representing the parsed filters
+	my @filters_obj = map {
+		my ($froute, $flen, $frange) =
+			$_ =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
+		die "invalid filter '$_'\n" if not defined $froute;
+		my $filter = new Net::IP("$froute");
+		die Net::IP::Error() . "\n" if not defined $filter;
+		$filter->{flen} = $flen;
+		$filter->{frange} = $frange;
+		$filter;
+	} @$filters;
+
+	# compare each route against the filters
+	my @ok;
+	foreach my $rroute (@$routes) {
+		my $route = new Net::IP($rroute) or die Net::IP::Error() . "\n";
+		my $match;
+		foreach (@filters_obj) {
+			my $rf = $route->rpsl_filter($_);
+			die Net::IP::Error() . "\n" if not defined $rf;
+			if ($rf) { $match = 1; last };
+		}
+		push(@ok, $rroute) if $match xor $reverse;
+	}
+	return \@ok;
+}
+
+=head2 rpsl_filter
+
+This function checks the prefix with a route filter expressed in the RPSL
+syntax. It returns true if $ip is allowed by the $filter.
+The $filter may be a string or a Net::IP object with additional B<frange>
+and B<flen> members.
+
+C<@list = $ip-E<gt>rpsl_filter($filter));>
+
+=cut
+
+sub Net::IP::rpsl_filter {
+	my ($self, $f) = @_;
+
+	my ($froute, $flen, $frange, $filter);
+	if (ref $f) {
+		die if ref ne 'Net::IP';
+		$filter = $f;
+		$flen = $filter->{flen};
+		$frange = $filter->{frange};
+	} else {
+		($froute, $flen, $frange) =
+			$f =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
+		if (not defined $froute) {
+			$Net::IP::ERROR = "invalid filter '$f'";
+			return undef;
+		}
+		my $filter = new Net::IP("$froute");
+		return undef if not defined $filter;
+	}
+
+	return 0 if $self->version != $filter->version;
+
+	my $overlap = $self->overlaps($filter); # A: route, B: filter
+	return undef if not defined $overlap;
+	return 0 if $overlap == $IP_NO_OVERLAP
+			 or $overlap == $IP_PARTIAL_OVERLAP
+			 or $overlap == $IP_B_IN_A_OVERLAP;
+
+	my ($lmin, $lmax);
+	if    (not defined $frange)			{ $lmin =          $lmax = $flen; }
+	elsif ($frange eq '+')				{ $lmin = $flen;   $lmax = 128; }
+	elsif ($frange eq '-')				{ $lmin = $flen+1; $lmax = 128; }
+	elsif ($frange =~ /^\d+$/)			{ $lmin =          $lmax = $frange; }
+	elsif ($frange =~ /^(\d+)-(\d+)$/)	{ $lmin = $1;      $lmax = $2; }
+	else { $Net::IP::ERROR =  "invalid filter '$filter'"; return undef; }
+
+	# $IP_IDENTICAL, $IP_A_IN_B_OVERLAP
+	my $rlen = $self->prefixlen;
+	return 1 if $rlen >= $lmin and $rlen <= $lmax;
+	return 0;
+}
+
+# ^+: inclusive more specifics
+# ^-: exclusive more specifics
+# ^n: length n more specifics
+# ^n-m: length n-m more specifics
+
+__DATA__
+- 1.0.0.0/23
+- 1.0.4.0/23
+- 1.0.4.0/24
+- 1.0.4.0/25
+- 2001:1418:13::/48
+---
+- 1.0.4.0/24^+
