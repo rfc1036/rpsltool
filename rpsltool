@@ -277,9 +277,9 @@ sub route2junos {
 	} elsif ($range eq '+') {
 		return "$prefix/$len orlonger";
 	} elsif ($range =~ /^([0-9]+)$/) {
-		return "$prefix/$len prefix length range /$1-/$1";
+		return "$prefix/$len upto /$1";
 	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
-		return "$prefix/$len prefix length range /$1-/$2";
+		return "$prefix/$len prefix-length-range /$1-/$2";
 	} else {
 		die "Cannot parse this prefix: '$_'\n";
 	}
