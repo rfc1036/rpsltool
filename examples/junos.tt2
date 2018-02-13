@@ -127,6 +127,7 @@ policy-options {
 %]
     replace:
     policy-statement [% neigh.$afi.policyname %] {
+        term filter {
 [% IF neigh.$afi.import_routes OR neigh.$afi.import_as %]
         from {
 [% IF neigh.$afi.import_as %]
@@ -154,6 +155,8 @@ policy-options {
 [% END %]
             accept;
         }
+        }
+        then reject;
     }
 [% END %]
 
