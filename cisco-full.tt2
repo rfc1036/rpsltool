@@ -4,6 +4,10 @@
       NEXT IF NOT conf.$ip.$afi;
       neigh = conf.$ip;
       x = neigh.$afi;
+
+      # Here you can modify the map and acl names to support applying
+      # different policies to different neighbor IPs of the same AS (e.g.
+      # at different IXes).
       IF ip.match('^92\.60\.70\.') OR ip.match('^2a01:658:ffff:');
         mapixname = '-MINAP';
       ELSE;
@@ -316,6 +320,7 @@ router bgp 65000
  neighbor PEERS route-map MAP-PEER-OUT out
  neighbor CUSTOMERS send-community
  neighbor CUSTOMERS route-map MIX-CUSTOMER-OUT out
+ neighbor CUSTOMERS remove-private-as
 %]
 [% FOREACH ip = conf.keys.sort %]
 [% neigh = conf.$ip %]
