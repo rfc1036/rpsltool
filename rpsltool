@@ -157,7 +157,8 @@ sub print_template {
 	$input = join("\n", @$input);
 
 	my $output;
-	$template->process(\$input, $vars, \$output) or die $template->error;
+	$template->process(\$input, $vars, \$output)
+		or die "Template processing has failed: " . $template->error . ".\n";
 
 	# remove leading empty lines
 	$output =~ s/^\n+//m;
@@ -269,7 +270,7 @@ sub route2junos {
 	!ox;
 
 	if (not $prefix or not $len) {
-		die "Cannot parse this prefix: '$_'\n";
+		die "Cannot parse this prefix: '$_[0]'\n";
 	} elsif (not $range) {
 		return "$prefix/$len exact";
 	} elsif ($range eq '-') {
@@ -281,7 +282,7 @@ sub route2junos {
 	} elsif ($range =~ /^([0-9]+)\-([0-9]+)$/) {
 		return "$prefix/$len prefix-length-range /$1-/$2";
 	} else {
-		die "Cannot parse this prefix: '$_'\n";
+		die "Cannot parse this prefix: '$_[0]'\n";
 	}
 }
 
