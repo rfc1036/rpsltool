@@ -26,7 +26,6 @@ use RPSLToolTemplate;
 # These parameters can be set in YAML files.
 
 my %default_parameters = (
-	whois_server		=> 'whois.ripe.net',
 	cache_root			=> '/tmp/rpsltool',
 	whois_die_on_error	=> 0,
 	whois_warn_on_error	=> 1,

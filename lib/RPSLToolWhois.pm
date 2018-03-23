@@ -8,7 +8,7 @@ use Cache::FileCache;
 sub whois_factory {
 	my ($param) = @_;
 
-	die "whois_server has not been set" if not $param->{whois_server};
+	$param->{whois_server} ||= 'whois.ripe.net';
 
 	my $whois = Net::Whois::RIPE->new($param->{whois_server}) or die;
 
