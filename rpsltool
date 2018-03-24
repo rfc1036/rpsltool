@@ -106,8 +106,7 @@ sub do_rpsl {
 				@aslist = map { $_ > 65536 ? '23456' : $_ } @aslist
 					if not $neigh->{asn32_supported};
 				$neigh->{import_as} = uniq_list(\@aslist);
-				$neigh->{aslistnum} = $neigh->{aslist}
-					or die "No aslist attribute set for $ip $afi\n";
+				$neigh->{aslistnum} = $neigh->{aslist} if $neigh->{aslist};
 			}
 		} # foreach $afi
 
