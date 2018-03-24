@@ -51,7 +51,7 @@ if (is_yaml($input)) {
 }
 
 make_boolean($param, qw(whois_die_on_error whois_warn_on_error
-	whois_warn_on_recursive_error));
+	whois_warn_on_recursive_error asn32_supported));
 
 ##############################################################################
 my $peers = process_peers_config($peers_config, $param);
@@ -101,10 +101,7 @@ sub do_rpsl {
 				$neigh->{import_routes} = uniq_list($routes);
 			}
 			if (@$aspathlist) {
-				# replace each ASN32 with AS_TRANS unless requested
 				my @aslist = map { s/^AS//; $_; } @$aspathlist;
-				@aslist = map { $_ > 65536 ? '23456' : $_ } @aslist
-					if not $neigh->{asn32_supported};
 				$neigh->{import_as} = uniq_list(\@aslist);
 				$neigh->{aslistnum} = $neigh->{aslist} if $neigh->{aslist};
 			}

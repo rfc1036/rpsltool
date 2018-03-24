@@ -33,6 +33,10 @@ sub whois_factory {
 	}) if $param->{cache_root};
 	$whois->cache($cache) if $cache;
 
+	# this private attribute is checked by import()
+	$whois->{_rpsltool_asn32_supported} = $param->{asn32_supported}
+		if defined $param->{asn32_supported};
+
 	# some debugging code to show when an object is not in cache
 	show_cache_misses()
 		if $param->{whois_show_cache_misses} or $ENV{WHOIS_SHOW_CACHE_MISSES};
@@ -98,6 +102,10 @@ sub import {
 	push(@routes, $self->asn_to_networks($_, $ipv6, 1)) foreach @aslist2;
 
 	push(@aspathlist, @aslist, @aslist2) if $default_aspath_filter;
+
+	# replace each ASN32 with AS_TRANS if not supported
+	@aspathlist = map { $_ > 65536 ? '23456' : $_ } @aspathlist
+		if not $self->{_rpsltool_asn32_supported};
 
 	return (\@routes, \@aspathlist);
 }
