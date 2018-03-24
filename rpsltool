@@ -98,11 +98,10 @@ sub do_rpsl {
 
 			# finally store the filters
 			if (@$routes) {
-				$neigh->{import_routes} = uniq_list($routes);
+				$neigh->{import_routes} = $routes;
 			}
 			if (@$aspathlist) {
-				my @aslist = map { s/^AS//; $_; } @$aspathlist;
-				$neigh->{import_as} = uniq_list(\@aslist);
+				$neigh->{import_as} = $aspathlist;
 				$neigh->{aslistnum} = $neigh->{aslist} if $neigh->{aslist};
 			}
 		} # foreach $afi

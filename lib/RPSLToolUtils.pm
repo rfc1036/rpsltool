@@ -215,10 +215,6 @@ sub common {
 	return \@diff;
 }
 
-sub uniq_list {
-	return [ keys %{{ map { $_ => undef } @{$_[0]} }} ];
-}
-
 ##############################################################################
 sub read_file {
 	my ($file) = @_;

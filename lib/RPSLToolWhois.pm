@@ -103,11 +103,18 @@ sub import {
 
 	push(@aspathlist, @aslist, @aslist2) if $default_aspath_filter;
 
+	@aspathlist = map { s/^AS//; $_; } @aspathlist;
+
 	# replace each ASN32 with AS_TRANS if not supported
 	@aspathlist = map { $_ > 65536 ? '23456' : $_ } @aspathlist
 		if not $self->{_rpsltool_asn32_supported};
 
-	return (\@routes, \@aspathlist);
+	# both recursive queries and removal of ASN32 may return duplicates
+	return (uniq_list(\@routes), uniq_list(\@aspathlist));
+}
+
+sub uniq_list {
+	return [ keys %{{ map { $_ => undef } @{$_[0]} }} ];
 }
 
 ##############################################################################
