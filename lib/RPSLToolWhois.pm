@@ -76,6 +76,8 @@ $routes_range	= qr/[0-9\+\-]+/;
 sub import {
 	my ($self, $import, $ipv6, $default_aspath_filter) = @_;
 
+	$import = [ $import ] if not ref $import;
+
 	my $saved_sources = $self->source;
 
 	my (@aslist, @aslist2, @aspathlist, @routes, $query_sources);
