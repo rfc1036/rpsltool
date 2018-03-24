@@ -34,6 +34,7 @@ sub whois_factory {
 	$whois->cache($cache) if $cache;
 
 	# this private attribute is checked by import()
+	$whois->{_rpsltool_asn32_supported} = 1;
 	$whois->{_rpsltool_asn32_supported} = $param->{asn32_supported}
 		if defined $param->{asn32_supported};
 
