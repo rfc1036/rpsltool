@@ -75,9 +75,22 @@ $routes_range	= qr/[0-9\+\-]+/;
 sub import {
 	my ($self, $import, $ipv6, $default_aspath_filter) = @_;
 
-	my (@aslist, @aslist2, @aspathlist, @routes);
+	my $saved_sources = $self->source;
+
+	my (@aslist, @aslist2, @aspathlist, @routes, $query_sources);
 	foreach (@$import) {
-		if      (/^<($aut_num|$as_set)>$/o) {
+		# ask for an as-path instead of a list of routes
+		my $aspath_query = 1 if s/^<(.+)>$/$1/;
+
+		# augment the RPSL language by allowing to override the object
+		# source(s) by prefixing objects with "SOURCE,SOURCE::"
+		if (s/^([A-Z0-9,]+):://) {
+			$self->source($1);
+		} elsif ($saved_sources) {
+			$self->source($saved_sources);
+		}
+
+		if      (/^($aut_num|$as_set)$/o and $aspath_query) {
 			push(@aspathlist, $self->expand_as_set($1));
 		} elsif (/^$aut_num$/o) {
 			push(@aslist, $_);
