@@ -87,6 +87,26 @@ function bgp_out(int peerasn)
 		bgp_local_pref = 0;
 	}
 
+	# Large BGP Communities
+	# do not advertise to <peerasn>
+	if ([% var.myasn %], 0,peerasn) ~ bgp_large_community then return false;
+	# advertise to <peerasn>
+	if ([% var.myasn %], 1,peerasn) ~ bgp_large_community then return true;
+	# do not advertise to any peer
+	if ([% var.myasn %], 0,0)       ~ bgp_large_community then return false;
+	# advertise to all peers
+	if ([% var.myasn %], 1,0)       ~ bgp_large_community then return true;
+
+	# mapping of large communities to normal communities:
+	# mapping base = 2^16-2^(32-23) = 65024
+	# mapped community = base + last_byte(v4_address)
+
+	case peerasn {
+		# skip any large ASN not yet defined
+		65536 .. 4294967295: return true;
+	}
+
+	# Normal communities
 	# do not advertise to <peerasn>
 	if (0,     peerasn)           ~ bgp_community  then return false;
 	# advertise to <peerasn>
