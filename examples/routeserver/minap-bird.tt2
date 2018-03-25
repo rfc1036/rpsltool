@@ -1,5 +1,5 @@
 [%
-# vim: syntax=tt2 shiftwidth=2 expandtab autoindent
+# vim: syntax=tt2 shiftwidth=2 autoindent
 USE date;
 USE wrap;
 
@@ -28,26 +28,24 @@ END;
 %]
 /*****************************************************************************
 *
-* BIRD configuration for rs-b.minap.it
+* BIRD configuration for rs1.minap.it
 * Generated on [% date.format(date.now, '%F %T') %].
 *
 *****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-3.html */
 
-router id 92.60.70.252;
+router id 185.1.114.252;
 [% IF var.ipv6 == 'y' %]
-listen bgp address 2a01:658:ffff::252;
+listen bgp address 2001:7f8:c5::1;
 [% ELSE %]
-listen bgp address 92.60.70.252;
+listen bgp address 185.1.114.252;
 [% END %]
 
 #debug protocols { states, routes, filters };
-debug protocols { states, routes };
+debug protocols { states };
 
-# must not be disabled or BGP will be silently disabled
-protocol device {
-	scan time 604800;
-}
+# must be configured, even empty, or BGP will be silently disabled
+protocol device { }
 
 /****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-5.html */
@@ -70,29 +68,29 @@ prefix set invalid;
 	return false;
 }
 
-function bgp_in(int peeras)
+function bgp_in(int peerasn)
 {
 	# enforce the presence of the peer AS as the first AS of the path
-	if !(bgp_path.first = peeras) then return false;
+	if !(bgp_path.first = peerasn) then return false;
 	# basic sanity checks
 	if (invalid_prefix()) then return false;
 	return true;
 }
 
-function bgp_out(int peeras)
+function bgp_out(int peerasn)
 {
 	# sanity check: ignore routes not learned from BGP
 	if !(source = RTS_BGP) then return false;
 
-	# do not advertise to <peeras>
-	if (0,     peeras) ~ bgp_community  then return false;
-	# advertise to <peeras>
-	if ([% var.myasn %], peeras) ~ bgp_community  then return true;
+	# do not advertise to <peerasn>
+	if (0,     peerasn)           ~ bgp_community  then return false;
+	# advertise to <peerasn>
+	if ([% var.myasn %], peerasn) ~ bgp_community  then return true;
 	# do not advertise to any peer
-	if (0,     [% var.myasn %])  ~ bgp_community  then return false;
+	if (0,     [% var.myasn %])   ~ bgp_community  then return false;
 [% IF var.defaultdeny %]
 	# advertise to all peers
-	if ([% var.myasn %], [% var.myasn %])  ~ bgp_community  then return true;
+	if ([% var.myasn %], [% var.myasn %]) ~ bgp_community  then return true;
 	return false;
 [% ELSE %]
 	return true;
