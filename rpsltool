@@ -11,7 +11,6 @@ use warnings;
 use strict;
 
 use YAML::XS;
-use Net::IP;
 use Template;
 use Storable qw(dclone);
 use FindBin;
