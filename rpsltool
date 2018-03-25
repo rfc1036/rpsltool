@@ -30,6 +30,7 @@ my %default_parameters = (
 	whois_die_on_error	=> 0,
 	whois_warn_on_error	=> 1,
 	whois_show_cache_misses	=> 0,
+	bgpq3 => 1,
 );
 
 ##############################################################################
