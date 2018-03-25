@@ -171,8 +171,6 @@ protocol bgp [% neigh.name | upper %][% extraname %] {
 	interpret communities no;
 [% IF neigh.maxpref %]
 	route limit [% neigh.maxpref %];
-[% ELSE %]
-	route limit 1000;
 [% END %]
 #	hold time 24;
 #	keepalive time 7;
