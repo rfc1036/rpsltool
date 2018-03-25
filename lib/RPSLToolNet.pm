@@ -1,11 +1,11 @@
 use warnings;
 use strict;
 
-use Net::IP;
+use Net::IP::XS qw($IP_NO_OVERLAP $IP_PARTIAL_OVERLAP $IP_A_IN_B_OVERLAP $IP_B_IN_A_OVERLAP);
 
 =head2 sort_networks
 
-This function sorts in place a list of prefixes represented by Net::IP
+This function sorts in place a list of prefixes represented by Net::IP::XS
 objects.
 
 =cut
@@ -21,7 +21,7 @@ sub sort_networks {
 =head2 aggregate_networks
 
 This function aggregates in place a B<sorted> list of prefixes represented
-by Net::IP objects.
+by Net::IP::XS objects.
 
 =cut
 
@@ -67,8 +67,8 @@ sub filter_networks {
 		my ($froute, $flen, $frange) =
 			$_ =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
 		die "invalid filter '$_'\n" if not defined $froute;
-		my $filter = new Net::IP("$froute");
-		die Net::IP::Error() . "\n" if not defined $filter;
+		my $filter = new Net::IP::XS("$froute");
+		die Net::IP::XS::Error() . "\n" if not defined $filter;
 		$filter->{flen} = $flen;
 		$filter->{frange} = $frange;
 		$filter;
@@ -77,11 +77,11 @@ sub filter_networks {
 	# compare each route against the filters
 	my @ok;
 	foreach my $rroute (@$routes) {
-		my $route = new Net::IP($rroute) or die Net::IP::Error() . "\n";
+		my $route = new Net::IP::XS($rroute) or die Net::IP::XS::Error() . "\n";
 		my $match;
 		foreach (@filter_objects) {
 			my $rf = $route->rpsl_filter($_);
-			die Net::IP::Error() . "\n" if not defined $rf;
+			die Net::IP::XS::Error() . "\n" if not defined $rf;
 			if ($rf) { $match = 1; last };
 		}
 		push(@ok, $rroute) if $match xor $reverse;
@@ -90,16 +90,18 @@ sub filter_networks {
 }
 
 ##############################################################################
-package Net::IP;
+package Net::IP::XS;
 
 use warnings;
 use strict;
+
+use Net::IP::XS qw($IP_NO_OVERLAP $IP_PARTIAL_OVERLAP $IP_A_IN_B_OVERLAP $IP_B_IN_A_OVERLAP);
 
 =head2 rpsl_filter
 
 This function checks the prefix with a route filter expressed in the RPSL
 syntax. It returns true if $ip is allowed by the $filter.
-The $filter may be a string or a Net::IP object with additional B<frange>
+The $filter may be a string or a Net::IP::XS object with additional B<frange>
 and B<flen> members.
 
 C<@list = $ip-E<gt>rpsl_filter($filter));>
@@ -131,7 +133,7 @@ sub rpsl_filter {
 
 	my ($froute, $flen, $frange, $filter);
 	if (ref $f) {
-		die if ref ne 'Net::IP';
+		die if ref ne 'Net::IP::XS';
 		$filter = $f;
 		$flen = $filter->{flen};
 		$frange = $filter->{frange};
@@ -139,11 +141,11 @@ sub rpsl_filter {
 		($froute, $flen, $frange) =
 			$f =~ m#^([\da-fA-F:\.]+/(\d+))(?:\^([\d\+\-]+))?$#;
 		if (not defined $froute) {
-			$self->{error} = $ERROR = "Invalid filter $f\n";
-			$self->{errno} = $ERRNO = 107;
+			$self->{error} = $Net::IP::XS::ERROR = "Invalid filter $f\n";
+			$self->{errno} = $Net::IP::XS::ERRNO = 107;
 			return undef;
 		}
-		my $filter = new Net::IP("$froute") or return undef;
+		my $filter = new Net::IP::XS("$froute") or return undef;
 	}
 
 	# silently ignore filters for a different AFI
@@ -169,7 +171,7 @@ sub rpsl_filter {
 	elsif ($frange =~ /^\d+$/)			{ $lmin =          $lmax = $frange; }
 	elsif ($frange =~ /^(\d+)-(\d+)$/)	{ $lmin = $1;      $lmax = $2; }
 	else {
-		$self->{error} = $ERROR = "invalid filter '$filter'";
+		$self->{error} = $Net::IP::XS::ERROR = "invalid filter '$filter'";
 		return undef;
 	}
 

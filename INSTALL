@@ -3,7 +3,7 @@ The following perl modules are needed:
 Net::Whois::RIPE >= 1.23	# libnet-whois-ripe-perl
 YAML::XS			# libyaml-libyaml-perl
 Cache::FileCache		# libcache-cache-perl
-Net::IP				# libnet-ip-perl
+Net::IP::XS			# libnet-ip-xs-perl
 Template			# libtemplate-perl
 
 If you are installing Net::Whois::RIPE then you should patch it with the

@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 #use RPSLToolUtils;
-#use Net::IP;
+#use Net::IP::XS;
 
 sub Template::create_whois_vmethods {
 	my ($template, $whois) = @_;
@@ -63,14 +63,14 @@ $context->define_vmethod('list', 'ipsort' => sub {
 	} map {
 		[ @$_, $_->[1]->version ]
 	} map {
-		[ $_, (Net::IP->new($_) or die "Not an IP: $_") ]
+		[ $_, (Net::IP::XS->new($_) or die "Not an IP: $_") ]
 	} @$networks;
 });
 
 $context->define_vmethod('list', 'aggregate' => sub {
 	my $networks = $_[0];
 
-	my @nets = map { Net::IP->new($_) or die "Not an IP: $_" } @$networks;
+	my @nets = map { Net::IP::XS->new($_) or die "Not an IP: $_" } @$networks;
 	sort_networks(\@nets);
 	aggregate_networks(\@nets);
 	return map {
