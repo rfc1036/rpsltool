@@ -118,11 +118,13 @@ END;
 function bgp_[% neigh.name %]_in(int peeras)
 prefix set [% neigh.name %]_in;
 {
+[% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	[% neigh.name %]_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
-	if !(bgp_in(peeras)) then return false;
 	if !(net ~ [% neigh.name %]_in) then return false;
+[% END %]
+	if !(bgp_in(peeras)) then return false;
 	return true;
 }
 
