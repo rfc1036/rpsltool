@@ -5,6 +5,10 @@ YAML::XS			# libyaml-libyaml-perl
 Cache::FileCache		# libcache-cache-perl
 Net::IP::XS			# libnet-ip-xs-perl
 Template			# libtemplate-perl
+Moo				# libmoo-perl
+Type::Tiny			# libtype-tiny-perl
+IPC::System::Simple		# libipc-system-simple-perl
+namespace::clean		# libnamespace-clean-perl
 
 If you are installing Net::Whois::RIPE then you should patch it with the
 whois.diff file or it will not be able to parse some objects.
