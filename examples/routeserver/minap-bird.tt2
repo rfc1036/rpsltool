@@ -195,7 +195,7 @@ protocol bgp [% neigh.name | upper %][% extraname %] {
 	rs client;
 	interpret communities no;
 [% IF neigh.maxpref %]
-	route limit [% neigh.maxpref %];
+	import limit [% neigh.maxpref %] action restart;
 [% END %]
 #	hold time 24;
 #	keepalive time 7;
