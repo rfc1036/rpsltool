@@ -82,6 +82,11 @@ function bgp_out(int peerasn)
 	# sanity check: ignore routes not learned from BGP
 	if !(source = RTS_BGP) then return false;
 
+	# graceful shutdown well known community
+	if (65535, 0) ~ bgp_community then {
+		bgp_local_pref = 0;
+	}
+
 	# do not advertise to <peerasn>
 	if (0,     peerasn)           ~ bgp_community  then return false;
 	# advertise to <peerasn>
