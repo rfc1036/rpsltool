@@ -142,7 +142,14 @@ END;
 %]
 function bgp_[% neigh.name %]_in(int peeras)
 prefix set [% neigh.name %]_in;
+int set [% neigh.name %]_as_in;
 {
+[% IF neigh.$afi.import_as AND neigh.$afi.import_as.size > 0 %]
+	[% neigh.name %]_as_in = [
+[% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
+	];
+	if !(bgp_path.last ~ [% neigh.name %]_as_in) then return false;
+[% END %]
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	[% neigh.name %]_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
