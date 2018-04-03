@@ -68,12 +68,27 @@ prefix set invalid;
 	return false;
 }
 
+function invalid_path()
+int set transit_free_as;
+{
+	# inspired by https://en.wikipedia.org/wiki/Tier_1_network
+	transit_free_as = [
+		174, 209, 286, 701, 702, 703, 1239, 1299,
+		2828, 2914, 3257, 3320, 3356, 3491, 3549,
+		5511, 6453, 6461, 6762, 6830, 7018, 12956
+	];
+
+	if bgp_path.first ~ transit_free_as then return false;
+	return bgp_path ~ transit_free_as;
+}
+
 function bgp_in(int peerasn)
 {
 	# enforce the presence of the peer AS as the first AS of the path
 	if !(bgp_path.first = peerasn) then return false;
 	# basic sanity checks
 	if (invalid_prefix()) then return false;
+	if (invalid_path()) then return false;
 	return true;
 }
 
