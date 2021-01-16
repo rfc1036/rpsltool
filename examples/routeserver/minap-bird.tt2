@@ -8,7 +8,7 @@ FOREACH ip = conf.keys;
   IF conf.$ip.name;
     conf.$ip.name = conf.$ip.name | lower;
   ELSIF conf.$ip.description;
-    conf.$ip.name = conf.$ip.description.replace('^([a-zA-Z0-9]+).*', '$1') | lower;
+    conf.$ip.name = conf.$ip.description.replace('[^a-zA-Z0-9]+', '') | lower;
   ELSE;
     conf.$ip.name = 'as' _ conf.$ip.as;
   END;
