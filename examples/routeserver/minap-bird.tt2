@@ -87,10 +87,10 @@ int set transit_free_as;
 	return bgp_path ~ transit_free_as;
 }
 
-function bgp_in(int peerasn)
+function bgp_in(int peeras)
 {
 	# enforce the presence of the peer AS as the first AS of the path
-	if !(bgp_path.first = peerasn) then return false;
+	if !(bgp_path.first = peeras) then return false;
 	# basic sanity checks
 	if (invalid_prefix()) then return false;
 	if (invalid_path()) then return false;
