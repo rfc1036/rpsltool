@@ -6,3 +6,5 @@ Net::Whois::RIPE will not notice it and will return success.
 
 More documentation is needed.
 
+asn32_supported only works for import().
+
