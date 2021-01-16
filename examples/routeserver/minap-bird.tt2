@@ -34,6 +34,11 @@ END;
 *****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-3.html */
 
+timeformat base         iso long;
+timeformat log          iso long;
+timeformat protocol     iso long;
+timeformat route        iso long;
+
 router id 185.1.114.252;
 [% IF var.ipv6 == 'y' %]
 listen bgp address 2001:7f8:c5::1;
