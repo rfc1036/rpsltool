@@ -142,6 +142,15 @@ function bgp_out(int peerasn)
 		bgp_local_pref = 0;
 	}
 
+	# blackholing community
+	if (65535, 666) ~ bgp_community then {
+[% IF var.ipv6 == 'y' %]
+		bgp_next_hop = 2001:7f8:c5::666;
+[% ELSE %]
+		bgp_next_hop = 185.1.114.66;
+[% END %]
+	}
+
 	# Large BGP Communities
 	# do not advertise to <peerasn>
 	if ([% var.myasn %], 0,peerasn) ~ bgp_large_community then return false;
