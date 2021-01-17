@@ -224,13 +224,10 @@ protocol bgp [% neigh.name | upper %][% extraname %] {
 [% IF neigh.maxpref %]
 	import limit [% neigh.maxpref %] action restart;
 [% END %]
-#	hold time 24;
-#	keepalive time 7;
-	connect retry time 3600;
 	passive;
 	import all;
 	export all;
-[% FOREACH cmd = neigh.custom_commands %]
+[% FOREACH cmd = neigh.bgp_commands %]
 	[% cmd %];
 [% END %]
 }
