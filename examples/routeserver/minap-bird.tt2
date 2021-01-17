@@ -187,6 +187,17 @@ function bgp_out(int peerasn)
 }
 
 /****************************************************************************/
+template bgp tb_rsclient {
+	local as [% var.myasn %];
+	passive;
+
+	interpret communities no;
+	import all;
+	export all;
+	rs client;
+}
+
+/****************************************************************************/
 /* For the pipe protocol, export filters control export of routes from the
  * primary table ("table") to the secondary one ("peer table"), import
  * filters control the opposite direction.
@@ -258,21 +269,15 @@ ELSE;
   extraname = '';
 END;
 %]
-protocol bgp [% neigh.name | upper %][% extraname %] {
+protocol bgp [% neigh.name | upper %][% extraname %] from tb_rsclient {
 [% IF neigh.description %]
 	description "[% neigh.description %]";
 [% END %]
 	neighbor [% ip %] as [% neigh.as %];
-	local as [% var.myasn %];
 	table T_[% neigh.name | upper %];
-	rs client;
-	interpret communities no;
 [% IF neigh.maxpref %]
 	import limit [% neigh.maxpref %] action restart;
 [% END %]
-	passive;
-	import all;
-	export all;
 [% FOREACH cmd = neigh.bgp_commands %]
 	[% cmd %];
 [% END %]
