@@ -192,7 +192,14 @@ template bgp tb_rsclient {
 	passive;
 
 	interpret communities no;
-	import all;
+	import filter {
+		# prevent next-hop hijacking
+		if !(from = bgp_next_hop) then
+			reject "REJECT: BGP neighbor address ", from,
+			" != next hop address ", bgp_next_hop,
+			" for ", net, " path:", bgp_path;
+		accept;
+	};
 	export all;
 	rs client;
 }
