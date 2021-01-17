@@ -223,22 +223,22 @@ ELSE;
 END;
 %]
 function bgp_[% neigh.name %]_in()
-prefix set [% neigh.name %]_in;
-int set [% neigh.name %]_as_in;
+prefix set networks_in;
+int set asn_in;
 {
 [% IF neigh.$afi.import_as AND neigh.$afi.import_as.size > 0 %]
-	[% neigh.name %]_as_in = [
+	asn_in = [
 [% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
 	];
-	if !(bgp_path.last ~ [% neigh.name %]_as_in) then return false;
+	if !(bgp_path.last ~ asn_in) then return false;
 [% END %]
 	if (reject_bogon_asns()) then return false;
 	if (transit_path([% neigh.as %])) then return false;
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
-	[% neigh.name %]_in = [
+	networks_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
-	if !(net ~ [% neigh.name %]_in) then return false;
+	if !(net ~ networks_in) then return false;
 [% END %]
 	if !(bgp_in([% neigh.as %])) then return false;
 	return true;
