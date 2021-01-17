@@ -73,18 +73,54 @@ prefix set invalid;
 	return false;
 }
 
-function invalid_path()
+# http://bgpfilterguide.nlnog.net/guides/bogon_asns/
+function reject_bogon_asns()
+int set bogon_asns;
+{
+	bogon_asns = [
+		0,		# RFC 7607
+		23456,		# RFC 4893 AS_TRANS
+		64496..64511,	# RFC 5398 and documentation/example ASNs
+		64512..65534,	# RFC 6996 Private ASNs
+		65535,		# RFC 7300 Last 16 bit ASN
+		65536..65551,	# RFC 5398 and documentation/example ASNs
+		65552..131071,	# RFC IANA reserved ASNs
+		4200000000..4294967294, # RFC 6996 Private ASNs
+		4294967295	# RFC 7300 Last 32 bit ASN
+	];
+
+	if (bgp_path ~ bogon_asns) then {
+		print "REJECT: bogon AS_PATH: ", net, " ", bgp_path;
+		return true;
+	}
+
+	return false;
+}
+
+# http://bgpfilterguide.nlnog.net/guides/no_transit_leaks/
+function transit_path(int peeras)
 int set transit_free_as;
 {
-	# inspired by https://en.wikipedia.org/wiki/Tier_1_network
 	transit_free_as = [
-		174, 209, 286, 701, 702, 703, 1239, 1299,
-		2828, 2914, 3257, 3320, 3356, 3491, 3549,
-		5511, 6453, 6461, 6762, 6830, 7018, 12956
+		# good for Italy
+		137, 1267, 3269, 12874,
+		# inspired by https://en.wikipedia.org/wiki/Tier_1_network
+[% IF var.ipv6 == 'n' %]
+		209, 4134, 12956,
+[% END %]
+		174,      286, 701, 702, 703, 1239, 1299,
+		2828, 2914, 3257, 3320, 3356, 3491, 3549, 3561,
+		      5511, 6453, 6461, 6762, 6830, 7018
 	];
 
 	if bgp_path.first ~ transit_free_as then return false;
-	return bgp_path ~ transit_free_as;
+
+	if (bgp_path ~ transit_free_as) then {
+		print "REJECT: Transit ASN from ", peeras, ": ",
+			net, " ", bgp_path;
+		return true;
+	}
+	return false;
 }
 
 function bgp_in(int peeras)
@@ -93,7 +129,6 @@ function bgp_in(int peeras)
 	if !(bgp_path.first = peeras) then return false;
 	# basic sanity checks
 	if (invalid_prefix()) then return false;
-	if (invalid_path()) then return false;
 	return true;
 }
 
@@ -170,6 +205,8 @@ int set [% neigh.name %]_as_in;
 	];
 	if !(bgp_path.last ~ [% neigh.name %]_as_in) then return false;
 [% END %]
+	if (reject_bogon_asns()) then return false;
+	if (transit_path(peeras)) then return false;
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	[% neigh.name %]_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
