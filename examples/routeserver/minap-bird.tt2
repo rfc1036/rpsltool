@@ -123,7 +123,9 @@ int set transit_free_as;
 	return false;
 }
 
-function bgp_in(int peeras)
+/****************************************************************************/
+# Do the checks common to all peers, called by the <ASN>_in filters.
+function bad_prefix(int peeras)
 {
 	# enforce the presence of the peer AS as the first AS of the path
 	if !(bgp_path.first = peeras) then return false;
@@ -135,6 +137,32 @@ function bgp_in(int peeras)
 	return true;
 }
 
+/****************************************************************************/
+/*
+This is the flow of routes inside the route server:
+protocol bgp:  import filter <ASN>_in
+               From the BGP neighbor to the peer table.
+               Reject the invalid routes.
+protocol pipe: import filter export_to_master
+               From the peer table to the master table.
+protocol pipe: export where ixp_community_filter(<ASN>)
+               From the master table to the peer table.
+               Apply the TE communities set by members.
+               Reject the routes which peers asked to announce selectively.
+protocol bgp:  export filter export_to_peer
+               From the peer table to the BGP neighbor.
+               Removes the looking glass communities.
+*/
+
+/****************************************************************************/
+# From the peer table to the master table.
+filter export_to_master
+{
+	accept;
+}
+
+/****************************************************************************/
+# From the master table to the peer table.
 function ixp_community_filter(int peerasn)
 {
 	# sanity check: ignore routes not learned from BGP
@@ -190,20 +218,24 @@ function ixp_community_filter(int peerasn)
 }
 
 /****************************************************************************/
+# From the peer table to the BGP neighbor.
+filter export_to_peer
+{
+	# remove the route servers communities
+	bgp_large_community.delete([([% var.myasn %], *, *)]);
+	bgp_community.delete([([% var.myasn %], *)]);
+	bgp_community.delete([(0, *)]);
+
+	accept;
+}
+
+/****************************************************************************/
 template bgp tb_rsclient {
 	local as [% var.myasn %];
 	passive;
 
 	interpret communities no;
-	import filter {
-		# prevent next-hop hijacking
-		if !(from = bgp_next_hop) then
-			reject "REJECT: BGP neighbor address ", from,
-			" != next hop address ", bgp_next_hop,
-			" for ", net, " path:", bgp_path;
-		accept;
-	};
-	export all;
+	export filter export_to_peer;
 	rs client;
 }
 
@@ -229,18 +261,27 @@ filter [% neigh.name %]_in
 prefix set networks_in;
 int set asn_in;
 {
-	if !(bgp_in([% neigh.as %])) then reject;
+	if !(bad_prefix([% neigh.as %])) then reject;
+
+	# prevent next-hop hijacking
+	if !(from = bgp_next_hop) then
+		reject "REJECT: BGP neighbor address ", from,
+		" != next hop address ", bgp_next_hop,
+		" for ", net, " path:", bgp_path;
+
 [% IF neigh.$afi.import_as AND neigh.$afi.import_as.size > 0 %]
 	asn_in = [
 [% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
 	];
 	if !(bgp_path.last ~ asn_in) then reject;
+
 [% END %]
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	networks_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
 	if !(net ~ networks_in) then reject;
+
 [% END %]
 	accept;
 }
@@ -251,10 +292,8 @@ protocol pipe P_[% neigh.name | upper %] {
 	table master;
 	mode transparent;
 	peer table T_[% neigh.name | upper %];
-	/* routes from the global table to [% neigh.name %] */
+	import filter export_to_master;
 	export where ixp_community_filter([% neigh.as %]);
-	/* routes from [% neigh.name %] to the global table */
-	import filter [% neigh.name %]_in;
 }
 
 
@@ -286,6 +325,7 @@ protocol bgp [% neigh.name | upper %][% extraname %] from tb_rsclient {
 [% IF neigh.maxpref %]
 	import limit [% neigh.maxpref %] action restart;
 [% END %]
+	import filter [% neigh.name %]_in;
 [% FOREACH cmd = neigh.bgp_commands %]
 	[% cmd %];
 [% END %]
