@@ -135,7 +135,7 @@ function bgp_in(int peeras)
 	return true;
 }
 
-function bgp_out(int peerasn)
+function ixp_community_filter(int peerasn)
 {
 	# sanity check: ignore routes not learned from BGP
 	if !(source = RTS_BGP) then return false;
@@ -252,7 +252,7 @@ protocol pipe P_[% neigh.name | upper %] {
 	mode transparent;
 	peer table T_[% neigh.name | upper %];
 	/* routes from the global table to [% neigh.name %] */
-	export where bgp_out([% neigh.as %]);
+	export where ixp_community_filter([% neigh.as %]);
 	/* routes from [% neigh.name %] to the global table */
 	import filter [% neigh.name %]_in;
 }
