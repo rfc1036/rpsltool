@@ -127,7 +127,10 @@ function bgp_in(int peeras)
 {
 	# enforce the presence of the peer AS as the first AS of the path
 	if !(bgp_path.first = peeras) then return false;
+	# reject routes with transit-free ASNs in the path
+	if (transit_path(peeras)) then reject;
 	# basic sanity checks
+	if (reject_bogon_asns()) then reject;
 	if (invalid_prefix()) then return false;
 	return true;
 }
@@ -226,21 +229,19 @@ filter [% neigh.name %]_in
 prefix set networks_in;
 int set asn_in;
 {
+	if !(bgp_in([% neigh.as %])) then reject;
 [% IF neigh.$afi.import_as AND neigh.$afi.import_as.size > 0 %]
 	asn_in = [
 [% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
 	];
 	if !(bgp_path.last ~ asn_in) then reject;
 [% END %]
-	if (reject_bogon_asns()) then reject;
-	if (transit_path([% neigh.as %])) then reject;
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	networks_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
 	if !(net ~ networks_in) then reject;
 [% END %]
-	if !(bgp_in([% neigh.as %])) then reject;
 	accept;
 }
 
