@@ -222,7 +222,7 @@ ELSE;
   seen.${neigh.as} = 1;
 END;
 %]
-function bgp_[% neigh.name %]_in()
+filter [% neigh.name %]_in
 prefix set networks_in;
 int set asn_in;
 {
@@ -230,18 +230,18 @@ int set asn_in;
 	asn_in = [
 [% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
 	];
-	if !(bgp_path.last ~ asn_in) then return false;
+	if !(bgp_path.last ~ asn_in) then reject;
 [% END %]
-	if (reject_bogon_asns()) then return false;
-	if (transit_path([% neigh.as %])) then return false;
+	if (reject_bogon_asns()) then reject;
+	if (transit_path([% neigh.as %])) then reject;
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	networks_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
-	if !(net ~ networks_in) then return false;
+	if !(net ~ networks_in) then reject;
 [% END %]
-	if !(bgp_in([% neigh.as %])) then return false;
-	return true;
+	if !(bgp_in([% neigh.as %])) then reject;
+	accept;
 }
 
 table T_[% neigh.name | upper %];
@@ -251,9 +251,9 @@ protocol pipe P_[% neigh.name | upper %] {
 	mode transparent;
 	peer table T_[% neigh.name | upper %];
 	/* routes from the global table to [% neigh.name %] */
-	export where bgp_out([% neigh.as %]) = true;
+	export where bgp_out([% neigh.as %]);
 	/* routes from [% neigh.name %] to the global table */
-	import where bgp_[% neigh.name %]_in() = true;
+	import filter [% neigh.name %]_in;
 }
 
 
