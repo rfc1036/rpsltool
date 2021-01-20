@@ -3,6 +3,16 @@
 USE date;
 USE wrap;
 
+IF var.ipv6 == 'y';
+  afi = 'ipv6';
+  afi_version = '6';
+  local_address = '2001:7f8:c5::1';
+ELSE;
+  afi = 'ipv4';
+  afi_version = '4';
+  local_address = '185.1.114.252';
+END;
+
 # determine the "short" alphanumeric name of each neighbor
 FOREACH ip = conf.keys;
   IF conf.$ip.name;
@@ -32,7 +42,7 @@ END;
 * Generated on [% date.format(date.now, '%F %T') %].
 *
 *****************************************************************************/
-/* http://bird.network.cz/?get_doc&f=bird-3.html */
+/* http://bird.network.cz/?get_doc&v=20&f=bird-3.html */
 
 timeformat base         iso long;
 timeformat log          iso long;
@@ -40,11 +50,6 @@ timeformat protocol     iso long;
 timeformat route        iso long;
 
 router id 185.1.114.252;
-[% IF var.ipv6 == 'y' %]
-listen bgp address 2001:7f8:c5::1;
-[% ELSE %]
-listen bgp address 185.1.114.252;
-[% END %]
 
 #debug protocols { states, routes, filters };
 debug protocols { states };
@@ -353,11 +358,15 @@ function strip_informational_communities()
 /****************************************************************************/
 template bgp tb_rsclient {
 	local as [% var.myasn %];
+	source address [% local_address %];
+	strict bind yes;
 	passive;
 
 	interpret communities no;
-	export filter export_to_peer;
-	add paths tx;
+	[% afi %] {
+		export filter export_to_peer;
+		add paths tx;
+	};
 	rs client;
 }
 
@@ -370,7 +379,6 @@ template bgp tb_rsclient {
 [% FOREACH ip = conf.keys.ipsort %]
 [%
 neigh = conf.$ip;
-afi = var.ipv6 == 'y' ? 'ipv6' : 'ipv4';
 
 # generate the configuration once even if the AS has multiple addresses
 IF seen.${neigh.as};
@@ -429,11 +437,10 @@ int set asn_in;
 	accept;
 }
 
-table T_[% neigh.name | upper %];
+[% afi %] table T_[% neigh.name | upper %];
 
 protocol pipe P_[% neigh.name | upper %] {
-	table master;
-	mode transparent;
+	table master[% afi_version %];
 	peer table T_[% neigh.name | upper %];
 	import filter export_to_master;
 	export where ixp_community_filter([% neigh.as %]);
@@ -464,13 +471,18 @@ protocol bgp [% neigh.name | upper %][% extraname %] from tb_rsclient {
 	description "[% neigh.description %]";
 [% END %]
 	neighbor [% ip %] as [% neigh.as %];
-	table T_[% neigh.name | upper %];
+	[% afi %] {
+		table T_[% neigh.name | upper %];
 [% IF neigh.maxpref %]
-	receive limit [% neigh.maxpref %] action restart;
+		receive limit [% neigh.maxpref %] action restart;
 [% ELSIF data.peeringdb_maxpref.$afi.${neigh.as} %]
-	receive limit [% data.peeringdb_maxpref.$afi.${neigh.as} %] action restart; # from PeeringDB
+		receive limit [% data.peeringdb_maxpref.$afi.${neigh.as} %] action restart; # from PeeringDB
 [% END %]
-	import filter [% neigh.name %]_in;
+		import filter [% neigh.name %]_in;
+[% FOREACH cmd = neigh.$afi.bgp_commands %]
+		[% cmd %];
+[% END %]
+	};
 [% FOREACH cmd = neigh.bgp_commands %]
 	[% cmd %];
 [% END %]
