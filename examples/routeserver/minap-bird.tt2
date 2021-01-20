@@ -53,6 +53,36 @@ debug protocols { states };
 protocol device { }
 
 /****************************************************************************/
+# From https://www.euro-ix.net/en/forixps/large-bgp-communities/
+
+# RS:1000-1999:* Informational
+
+# RS:1000:* RPKI filtering outcome
+define IXP_LC_INFO_RPKI_NOT_CHECKED		= ([% var.myasn %], 1000, 3);
+# RS:1001:* IRRDB filtering outcome
+define IXP_LC_INFO_IRRDB_VALID			= ([% var.myasn %], 1001, 1);
+define IXP_LC_INFO_IRRDB_NOT_CHECKED		= ([% var.myasn %], 1001, 2);
+define IXP_LC_INFO_IRRDB_MORE_SPECIFIC		= ([% var.myasn %], 1001, 3);
+define IXP_LC_INFO_IRRDB_FILTERED_LOOSE		= ([% var.myasn %], 1001, 1000);
+define IXP_LC_INFO_IRRDB_FILTERED_STRICT	= ([% var.myasn %], 1001, 1001);
+define IXP_LC_INFO_IRRDB_PREFIX_EMPTY		= ([% var.myasn %], 1001, 1002);
+
+# RS:1100-1199:* Filtered reasons
+# RS:1101:* Route was filtered on import
+define IXP_LC_FILTERED_PREFIX_LEN_TOO_LONG	= ([% var.myasn %], 1101, 1);
+define IXP_LC_FILTERED_PREFIX_LEN_TOO_SHORT	= ([% var.myasn %], 1101, 2);
+define IXP_LC_FILTERED_BOGON			= ([% var.myasn %], 1101, 3);
+define IXP_LC_FILTERED_BOGON_ASN		= ([% var.myasn %], 1101, 4);
+define IXP_LC_FILTERED_AS_PATH_TOO_LONG		= ([% var.myasn %], 1101, 5);
+define IXP_LC_FILTERED_AS_PATH_TOO_SHORT	= ([% var.myasn %], 1101, 6);
+define IXP_LC_FILTERED_FIRST_AS_NOT_PEER_AS	= ([% var.myasn %], 1101, 7);
+define IXP_LC_FILTERED_NEXT_HOP_NOT_PEER_IP	= ([% var.myasn %], 1101, 8);
+define IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED	= ([% var.myasn %], 1101, 9);
+define IXP_LC_FILTERED_IRRDB_ORIGIN_AS_FILTERED	= ([% var.myasn %], 1101, 10);
+define IXP_LC_FILTERED_PREFIX_NOT_IN_ORIGIN_AS	= ([% var.myasn %], 1101, 11);
+define IXP_LC_FILTERED_TRANSIT_FREE_ASN		= ([% var.myasn %], 1101, 14);
+
+/****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-5.html */
 
 function invalid_prefix()
@@ -127,14 +157,46 @@ int set transit_free_as;
 # Do the checks common to all peers, called by the <ASN>_in filters.
 function bad_prefix(int peeras)
 {
+	if (bgp_path.len < 1) then {
+		bgp_large_community.add(IXP_LC_FILTERED_AS_PATH_TOO_SHORT);
+		return true;
+	}
+
 	# enforce the presence of the peer AS as the first AS of the path
-	if !(bgp_path.first = peeras) then return false;
+	if (bgp_path.first != peeras) then {
+		bgp_large_community.add(IXP_LC_FILTERED_FIRST_AS_NOT_PEER_AS);
+		return true;
+	}
+
+	# Filter small prefixes
+[% LONG_PREFIX_FILTER = var.ipv6 == 'y' ? '::/0{49,128}' : '0.0.0.0/0{25,32}' %]
+	if (net ~ [ [% LONG_PREFIX_FILTER %] ]) then {
+		bgp_large_community.add(IXP_LC_FILTERED_PREFIX_LEN_TOO_LONG);
+		return true;
+	}
+
+	if invalid_prefix() then {
+		bgp_large_community.add(IXP_LC_FILTERED_BOGON);
+		return true;
+	}
+
+	if reject_bogon_asns() then {
+		bgp_large_community.add(IXP_LC_FILTERED_BOGON_ASN);
+		return true;
+	}
+
 	# reject routes with transit-free ASNs in the path
-	if (transit_path(peeras)) then reject;
-	# basic sanity checks
-	if (reject_bogon_asns()) then reject;
-	if (invalid_prefix()) then return false;
-	return true;
+	if transit_path(peeras) then {
+		bgp_large_community.add(IXP_LC_FILTERED_TRANSIT_FREE_ASN);
+		return true;
+	}
+
+	if (bgp_path.len > 64) then {
+		bgp_large_community.add(IXP_LC_FILTERED_AS_PATH_TOO_LONG);
+		return true;
+	}
+
+	return false;
 }
 
 /****************************************************************************/
@@ -142,9 +204,10 @@ function bad_prefix(int peeras)
 This is the flow of routes inside the route server:
 protocol bgp:  import filter <ASN>_in
                From the BGP neighbor to the peer table.
-               Reject the invalid routes.
+               Tag the invalid routes that need to be dropped later.
 protocol pipe: import filter export_to_master
                From the peer table to the master table.
+               Reject the routes tagged as invalid in the <ASN>_in filter.
 protocol pipe: export where ixp_community_filter(<ASN>)
                From the master table to the peer table.
                Apply the TE communities set by members.
@@ -158,6 +221,9 @@ protocol bgp:  export filter export_to_peer
 # From the peer table to the master table.
 filter export_to_master
 {
+	# drop the routes tagged to be filtered in the <ASN>_in filter
+	if (bgp_large_community ~ [([% var.myasn %], 1101, *)]) then reject;
+
 	accept;
 }
 
@@ -261,26 +327,40 @@ filter [% neigh.name %]_in
 prefix set networks_in;
 int set asn_in;
 {
-	if !(bad_prefix([% neigh.as %])) then reject;
+	if bad_prefix([% neigh.as %]) then accept;
 
 	# prevent next-hop hijacking
-	if !(from = bgp_next_hop) then
-		reject "REJECT: BGP neighbor address ", from,
+	if (from != bgp_next_hop) then {
+		print "REJECT: BGP neighbor address ", from,
 		" != next hop address ", bgp_next_hop,
 		" for ", net, " path:", bgp_path;
+		bgp_large_community.add(IXP_LC_FILTERED_NEXT_HOP_NOT_PEER_IP);
+		accept;
+	}
 
 [% IF neigh.$afi.import_as AND neigh.$afi.import_as.size > 0 %]
 	asn_in = [
 [% neigh.$afi.import_as.nsort.join(', ') | wrap +%]
 	];
-	if !(bgp_path.last ~ asn_in) then reject;
+	if (bgp_path.last_nonaggregated !~ asn_in) then {
+		bgp_large_community.add(IXP_LC_FILTERED_IRRDB_ORIGIN_AS_FILTERED);
+		accept;
+	}
 
 [% END %]
+	bgp_large_community.add(IXP_LC_INFO_RPKI_NOT_CHECKED);
+
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	networks_in = [
 [% neigh.$afi.import_routes.ipsort.route2bird.join(', ') | lower | wrap +%]
 	];
-	if !(net ~ networks_in) then reject;
+	if (net !~ networks_in) then {
+		bgp_large_community.add(IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED);
+		bgp_large_community.add(IXP_LC_INFO_IRRDB_FILTERED_STRICT);
+		accept;
+	} else {
+		bgp_large_community.add(IXP_LC_INFO_IRRDB_VALID);
+	}
 
 [% END %]
 	accept;
