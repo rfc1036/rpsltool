@@ -137,15 +137,18 @@ function transit_path(int peeras)
 int set transit_free_as;
 {
 	transit_free_as = [
-		# good for Italy
-		137, 1267, 3269, 12874,
+		# regional peer lock for Italy, ordered by the Caida AS rank
+		3269, 1267, 41327, 3302, 12779, 8968, 30722, 137,
+[% IF var.ipv6 == 'n' %]
+		8220, 28716, 12874,
+[% END %]
 		# inspired by https://en.wikipedia.org/wiki/Tier_1_network
 [% IF var.ipv6 == 'n' %]
 		209, 4134, 12956,
 [% END %]
-		174,      286, 701, 702, 703, 1239, 1299,
+		174,      286, 701, 702, 703, 1239, 1273, 1299,
 		2828, 2914, 3257, 3320, 3356, 3491, 3549, 3561,
-		      5511, 6453, 6461, 6762, 6830, 7018
+		      5511, 6453, 6461, 6762, 6830, 7018, 9002
 	];
 
 	if bgp_path.first ~ transit_free_as then return false;
