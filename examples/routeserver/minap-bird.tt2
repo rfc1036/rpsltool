@@ -256,6 +256,18 @@ function ixp_community_filter(int peerasn)
 [% END %]
 	}
 
+	# as-path prepending
+	if        ([% var.myasn %], 103, peerasn) ~ bgp_large_community then {
+		bgp_path.prepend(bgp_path.first);
+		bgp_path.prepend(bgp_path.first);
+		bgp_path.prepend(bgp_path.first);
+	} else if ([% var.myasn %], 102, peerasn) ~ bgp_large_community then {
+		bgp_path.prepend(bgp_path.first);
+		bgp_path.prepend(bgp_path.first);
+	} else if ([% var.myasn %], 101, peerasn) ~ bgp_large_community then {
+		bgp_path.prepend(bgp_path.first);
+	}
+
 	# Large BGP Communities
 	# do not advertise to <peerasn>
 	if ([% var.myasn %], 0,peerasn) ~ bgp_large_community then return false;
