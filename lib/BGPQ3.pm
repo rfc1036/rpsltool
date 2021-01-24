@@ -105,7 +105,8 @@ sub _bgpq3_cmdline {
 
 	my @params;
 	push(@params, '-3') if $self->asn32;
-	push(@params, '-6') if $self->ipv6;
+	push(@params, '-6') if $self->ipv6
+		and not ($self->aspath_query or $aspath_query);
 	push(@params, '-d') if $self->debug;
 	push(@params, '-D') if $self->asdot;
 	push(@params, '-S', join(',', @{$self->sources}))
