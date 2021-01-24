@@ -87,7 +87,7 @@ sub import {
 
 		# augment the RPSL language by allowing to override the object
 		# source(s) by prefixing objects with "SOURCE,SOURCE::"
-		if (s/^([A-Z0-9,]+):://) {
+		if (s/^([A-Z0-9,-]+):://) {
 			$self->source($1);
 		} elsif ($saved_sources) {
 			$self->source($saved_sources);
