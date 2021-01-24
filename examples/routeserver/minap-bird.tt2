@@ -382,6 +382,11 @@ int set asn_in;
 		bgp_large_community.add(IXP_LC_INFO_IRRDB_VALID);
 	}
 
+[% ELSE %]
+	# deny everything because the IRRDB query returned an empty set
+	bgp_large_community.add(IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED);
+	bgp_large_community.add(IXP_LC_INFO_IRRDB_PREFIX_EMPTY);
+
 [% END %]
 	accept;
 }
