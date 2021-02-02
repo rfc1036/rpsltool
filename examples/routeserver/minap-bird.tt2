@@ -322,6 +322,7 @@ template bgp tb_rsclient {
 
 	interpret communities no;
 	export filter export_to_peer;
+	add paths tx;
 	rs client;
 }
 
