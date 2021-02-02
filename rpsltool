@@ -10,7 +10,7 @@
 use warnings;
 use strict;
 
-use YAML::XS;
+use YAML::XS qw(Load LoadFile);
 use Template;
 use Storable qw(dclone);
 use FindBin;
@@ -57,6 +57,8 @@ make_boolean($param, qw(whois_die_on_error whois_warn_on_error
 ##############################################################################
 my $peers = process_peers_config($peers_config, $param);
 
+my $data = read_data_files($param);
+
 # open the connection to the whois server and configure the default parameters
 my $whois = $param->{bgpq3} ? bgpq3_factory($param) : whois_factory($param);
 
@@ -66,9 +68,43 @@ print_template($input, {
 	param	=> $param,
 	var		=> $variables,
 	conf	=> $peers,
+	data	=> $data,
 }, $whois);
 exit 0;
 
+}
+##############################################################################
+# Read data from YAML-formatted files defined in the router configuration.
+sub read_data_files {
+	my ($param) = @_;
+
+	# get all the *_data_file program parameters from the router configuration
+	my @data_files = grep { /^[a-z0-9_]+_data_file$/ } keys %$param;
+
+	# read each file
+	my $data;
+	foreach my $file_name (@data_files) {
+		my $file = $param->{$file_name};
+		my ($var_name) = $file_name =~ /^(.+)_data_file$/;
+		my $content = read_data_file($file, $var_name);
+		$data->{$var_name} = $content if defined $content;
+	}
+
+	return $data;
+}
+
+# Read the $file YAML file and return the content of the $var_name key of
+# its top-level hash. Any other keys are ignored.
+sub read_data_file {
+	my ($file, $var_name) = @_;
+
+	die "$file does not exist!\n" if not -e $file;
+	my $data = LoadFile($file);
+	die "$file is empty!\n" if not defined $data;
+	die "$file is not valid (lacks $var_name)!\n"
+		if not exists $data->{$var_name} or not ref $data->{$var_name};
+
+	return $data->{$var_name};
 }
 
 ##############################################################################
