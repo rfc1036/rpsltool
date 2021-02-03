@@ -81,6 +81,7 @@ define IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED	= ([% var.myasn %], 1101, 9);
 define IXP_LC_FILTERED_IRRDB_ORIGIN_AS_FILTERED	= ([% var.myasn %], 1101, 10);
 define IXP_LC_FILTERED_PREFIX_NOT_IN_ORIGIN_AS	= ([% var.myasn %], 1101, 11);
 define IXP_LC_FILTERED_TRANSIT_FREE_ASN		= ([% var.myasn %], 1101, 14);
+define IXP_LC_FILTERED_NEVER_VIA_RS		= ([% var.myasn %], 1101, 15);
 
 /****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-5.html */
@@ -132,6 +133,22 @@ int set bogon_asns;
 	return false;
 }
 
+[% IF data.never_via_rs %]
+# https://docs.peeringdb.com/faq/#what-does-the-never-via-route-servers-flag-mean-and-how-does-it-work
+function never_via_rs()
+int set never_via_rs_as;
+{
+	never_via_rs_as = [
+[% data.never_via_rs.join(', ') | wrap +%]
+	];
+
+	if (bgp_path ~ never_via_rs_as) then {
+		return true;
+	}
+	return false;
+}
+
+[% END %]
 # http://bgpfilterguide.nlnog.net/guides/no_transit_leaks/
 function transit_path(int peeras)
 int set transit_free_as;
@@ -193,6 +210,15 @@ function bad_prefix(int peeras)
 		return true;
 	}
 
+[% IF data.never_via_rs %]
+	# reject routes with paths containing ASNs with the
+	# "never via route servers" flag in PeeringDB
+	if never_via_rs() then {
+		bgp_large_community.add(IXP_LC_FILTERED_NEVER_VIA_RS);
+		return true;
+	}
+
+[% END %]
 	# reject routes with transit-free ASNs in the path
 	if transit_path(peeras) then {
 		bgp_large_community.add(IXP_LC_FILTERED_TRANSIT_FREE_ASN);
