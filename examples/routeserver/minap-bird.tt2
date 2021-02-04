@@ -455,7 +455,7 @@ protocol bgp [% neigh.name | upper %][% extraname %] from tb_rsclient {
 	neighbor [% ip %] as [% neigh.as %];
 	table T_[% neigh.name | upper %];
 [% IF neigh.maxpref %]
-	import limit [% neigh.maxpref %] action restart;
+	receive limit [% neigh.maxpref %] action restart;
 [% END %]
 	import filter [% neigh.name %]_in;
 [% FOREACH cmd = neigh.bgp_commands %]
