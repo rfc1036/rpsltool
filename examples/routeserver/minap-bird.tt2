@@ -456,6 +456,8 @@ protocol bgp [% neigh.name | upper %][% extraname %] from tb_rsclient {
 	table T_[% neigh.name | upper %];
 [% IF neigh.maxpref %]
 	receive limit [% neigh.maxpref %] action restart;
+[% ELSIF data.peeringdb_maxpref.$afi.${neigh.as} %]
+	receive limit [% data.peeringdb_maxpref.$afi.${neigh.as} %] action restart; # from PeeringDB
 [% END %]
 	import filter [% neigh.name %]_in;
 [% FOREACH cmd = neigh.bgp_commands %]
