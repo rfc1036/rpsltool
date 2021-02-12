@@ -342,6 +342,15 @@ filter export_to_peer
 }
 
 /****************************************************************************/
+# Remove the informational communities from incoming routes.
+function strip_informational_communities()
+{
+	bgp_large_community.delete([([% var.myasn %], 1000 .. 1001, *)]);
+	# do not remove the RS:1002:* tracing community
+	bgp_large_community.delete([([% var.myasn %], 1003 .. 1999, *)]);
+}
+
+/****************************************************************************/
 template bgp tb_rsclient {
 	local as [% var.myasn %];
 	passive;
@@ -374,6 +383,8 @@ filter [% neigh.name %]_in
 prefix set networks_in;
 int set asn_in;
 {
+	strip_informational_communities();
+
 	if bad_prefix([% neigh.as %]) then accept;
 
 	# prevent next-hop hijacking
