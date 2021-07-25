@@ -81,7 +81,7 @@ define IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED	= ([% var.myasn %], 1101, 9);
 define IXP_LC_FILTERED_IRRDB_ORIGIN_AS_FILTERED	= ([% var.myasn %], 1101, 10);
 define IXP_LC_FILTERED_PREFIX_NOT_IN_ORIGIN_AS	= ([% var.myasn %], 1101, 11);
 define IXP_LC_FILTERED_TRANSIT_FREE_ASN		= ([% var.myasn %], 1101, 14);
-define IXP_LC_FILTERED_NEVER_VIA_RS		= ([% var.myasn %], 1101, 15);
+define IXP_LC_FILTERED_NEVER_VIA_RS		= ([% var.myasn %], 1101, 16);
 
 /****************************************************************************/
 /* http://bird.network.cz/?get_doc&f=bird-5.html */
