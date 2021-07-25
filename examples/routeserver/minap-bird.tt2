@@ -57,12 +57,28 @@ debug protocols { states };
 # must be configured, even empty, or BGP will be silently disabled
 protocol device { }
 
+[% IF var.rpki %]
+/****************************************************************************/
+roa[% afi_version %] table t_roa;
+
+protocol rpki rpki1 {
+	roa[% afi_version %] { table t_roa; };
+	remote "rpki1.minap.it" port 323;
+
+	retry keep 90;
+	refresh keep 900;
+	expire keep 172800;
+}
+
+[% END %]
 /****************************************************************************/
 # From https://www.euro-ix.net/en/forixps/large-bgp-communities/
 
 # RS:1000-1999:* Informational
 
 # RS:1000:* RPKI filtering outcome
+define IXP_LC_INFO_RPKI_VALID			= ([% var.myasn %], 1000, 1);
+define IXP_LC_INFO_RPKI_UNKNOWN			= ([% var.myasn %], 1000, 2);
 define IXP_LC_INFO_RPKI_NOT_CHECKED		= ([% var.myasn %], 1000, 3);
 # RS:1001:* IRRDB filtering outcome
 define IXP_LC_INFO_IRRDB_VALID			= ([% var.myasn %], 1001, 1);
@@ -85,6 +101,8 @@ define IXP_LC_FILTERED_NEXT_HOP_NOT_PEER_IP	= ([% var.myasn %], 1101, 8);
 define IXP_LC_FILTERED_IRRDB_PREFIX_FILTERED	= ([% var.myasn %], 1101, 9);
 define IXP_LC_FILTERED_IRRDB_ORIGIN_AS_FILTERED	= ([% var.myasn %], 1101, 10);
 define IXP_LC_FILTERED_PREFIX_NOT_IN_ORIGIN_AS	= ([% var.myasn %], 1101, 11);
+define IXP_LC_FILTERED_RPKI_UNKNOWN		= ([% var.myasn %], 1101, 12);
+define IXP_LC_FILTERED_RPKI_INVALID		= ([% var.myasn %], 1101, 13);
 define IXP_LC_FILTERED_TRANSIT_FREE_ASN		= ([% var.myasn %], 1101, 14);
 define IXP_LC_FILTERED_NEVER_VIA_RS		= ([% var.myasn %], 1101, 16);
 
@@ -414,7 +432,23 @@ int set asn_in;
 	}
 
 [% END %]
+[% IF var.rpki %]
+	if (roa_check(t_roa, net, bgp_path.last_nonaggregated) = ROA_VALID) then {
+		bgp_large_community.add(IXP_LC_INFO_RPKI_VALID);
+		accept;
+	}
+
+	if (roa_check(t_roa, net, bgp_path.last_nonaggregated) = ROA_INVALID) then {
+		bgp_large_community.add(IXP_LC_FILTERED_RPKI_INVALID);
+		accept;
+	} else {
+		# the RPKI status is unknown, so try checking the IRR
+		bgp_large_community.add(IXP_LC_INFO_RPKI_UNKNOWN);
+	}
+[% ELSE %]
+	# report that RPKI is not enabled
 	bgp_large_community.add(IXP_LC_INFO_RPKI_NOT_CHECKED);
+[% END %]
 
 [% IF neigh.$afi.import_routes AND neigh.$afi.import_routes.size > 0 %]
 	networks_in = [
