@@ -15,7 +15,7 @@ use FindBin;
 
 use lib "$FindBin::RealBin/lib";
 use RPSLToolUtils;
-use RPSLToolWhois;
+use RPSLToolBGPQ3;
 use RPSLToolNet;
 
 my $v6route = qr/[:0-9a-fA-F\/^\-\+]+/;
@@ -55,7 +55,7 @@ if ($asn) {
 my $peer = $peers->{$ip};
 die "Neighbour $ip does not exist\n" if not $peer;
 
-my $whois = whois_factory($param);
+my $whois = bgpq3_factory($param);
 
 my $diff = compare_routes_received_irr2($peer, $param, $whois, undef);
 print "Missing routes:\n" . join("\n", @$diff) . "\n";
@@ -110,5 +110,3 @@ routesdir: ../routes/mambo.core.itgate.net
 # this way the announced routes will be compared to the "official" data
 ignore_custom_routes: y
 #ignore_custom_asn: y
-
-whois_server: whois.ripe.net
