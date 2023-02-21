@@ -10,7 +10,7 @@ use namespace::clean;
 has path => (
 	is => 'rw',
 	isa => Str,
-	default => 'bgpq3',
+	default => 'bgpq4',
 );
 
 has host => (
