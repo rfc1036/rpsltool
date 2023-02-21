@@ -17,7 +17,6 @@ use FindBin;
 
 use lib "$FindBin::RealBin/lib";
 use RPSLToolUtils;
-use RPSLToolWhois;
 use RPSLToolBGPQ3;
 use RPSLToolNet;
 use RPSLToolTemplate;
@@ -31,7 +30,6 @@ my %default_parameters = (
 	whois_die_on_error	=> 0,
 	whois_warn_on_error	=> 1,
 	whois_show_cache_misses	=> 0,
-	bgpq3 => 1,
 );
 
 ##############################################################################
@@ -60,7 +58,7 @@ my $peers = process_peers_config($peers_config, $param);
 my $data = read_data_files($param);
 
 # open the connection to the whois server and configure the default parameters
-my $whois = $param->{bgpq3} ? bgpq3_factory($param) : whois_factory($param);
+my $whois = bgpq3_factory($param);
 
 do_rpsl($whois, $peers);
 
