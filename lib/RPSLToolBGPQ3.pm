@@ -13,8 +13,6 @@ sub bgpq3_factory {
 
 	$bgpq3->debug(1) if $param->{whois_debug};
 	$bgpq3->sources($param->{whois_source}) if $param->{whois_source};
-	$bgpq3->asn32($param->{asn32_supported})
-		if defined $param->{asn32_supported};
 
 	# setup the query cache
 	my $cache = new Cache::FileCache({
