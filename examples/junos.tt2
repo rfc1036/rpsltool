@@ -73,10 +73,14 @@ protocols {
   IF afi == 'ipv6' AND NOT neigh.$afi.import_routes; policy = "BGP-INCOMINGv6 " _ policy; END;
 %]
                 import [ [% policy %] [% neigh.$afi.policyname %] ];
+[% IF neigh.$afi.out_policy %]
+                export [% neigh.$afi.out_policy %];
+[% END %]
                 peer-as [% neigh.as %];
 [% FOREACH cmd = neigh.bgp_commands.merge(neigh.$afi.bgp_commands) %]
                 [% cmd %];
 [% END %]
+                [% neigh.$afi.bgp_commands_string %]
 [% IF neigh.$afi.maxpref %]
                 family [% afi2family(afi) %] {
                     any {
@@ -109,10 +113,19 @@ policy-options {
 [% NEXT IF seen.pl.${neigh.$afi.aspathname};
    seen.pl.${neigh.$afi.aspathname} = 1;
 %]
-[% NEXT IF NOT neigh.$afi.import_as %]
+[% IF neigh.$afi.import_as %]
     replace:
 [% aslist = neigh.$afi.import_as.nsort %]
     as-path [% neigh.$afi.aspathname %] "([% aslist.join('|') %])+";
+[% END %]
+[% IF neigh.$afi.import_routes %]
+    replace:
+    prefix-list [% neigh.$afi.policyname %] {
+[% FOREACH route = neigh.$afi.import_routes.ipsort %]
+        [% route %];
+[% END %]
+    }
+[% END %]
 
 [% END %]
 [% END %]
@@ -133,8 +146,8 @@ policy-options {
 [% IF neigh.$afi.import_as %]
             as-path [% neigh.$afi.aspathname %];
 [% END %]
-[% FOREACH route = neigh.$afi.import_routes.ipsort %]
-            route-filter [% route.route2junos %];
+[% IF neigh.$afi.import_routes %]
+            prefix-list [% neigh.$afi.policyname %];
 [% END %]
         }
 [% END %]
