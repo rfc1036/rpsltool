@@ -16,7 +16,7 @@ use FindBin;
 
 use lib "$FindBin::RealBin/lib";
 use RPSLToolUtils;
-use RPSLToolWhois;
+use RPSLToolBGPQ3;
 
 ##############################################################################
 my $ipv6 = 0;
@@ -41,7 +41,7 @@ make_boolean($param, qw(whois_show_cache_misses
 $param->{whois_server} = $whois_server if $whois_server;
 $param->{whois_source} = $whois_source if $whois_source;
 
-my $whois = whois_factory($param);
+my $whois = bgpq3_factory($param);
 
 my ($routes, $asn) = $whois->import(\@import, $ipv6, 0);
 
@@ -62,7 +62,6 @@ END
 }
 
 __DATA__
-whois_server: whois.ripe.net
 cache_root: /tmp/rpsltool
 
 #whois_show_cache_misses: y
