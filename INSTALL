@@ -1,6 +1,5 @@
 The following perl modules are needed:
 
-Net::Whois::RIPE >= 1.23	# libnet-whois-ripe-perl
 YAML::XS			# libyaml-libyaml-perl
 Cache::FileCache		# libcache-cache-perl
 Net::IP::XS			# libnet-ip-xs-perl
@@ -10,14 +9,17 @@ Type::Tiny			# libtype-tiny-perl
 IPC::System::Simple		# libipc-system-simple-perl
 namespace::clean		# libnamespace-clean-perl
 
-If you are installing Net::Whois::RIPE then you should patch it with the
-whois.diff file or it will not be able to parse some objects.
-(The Debian package has already been patched.)
+The following other dependencies are needed:
+https://github.com/bgp/bgpq4	# bgpq4
 
 To install the package, unpack it in /usr/local/lib/, /opt/ or another
 appropriate directory and then create symlinks to the programs from a
 directory in the $PATH.
 
+Even if the code mentions bgpq3, I have switched to bgpq4 long ago and
+strongly recommend it.
+The Net::Whois::RIPE backend has been deprecated for a long time and is
+being removed.
 
 The point of the supplied template files is not to provide fully
 generic and parametrized templates which can be used for every
